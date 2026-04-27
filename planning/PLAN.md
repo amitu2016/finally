@@ -88,7 +88,7 @@ The user runs a single Docker command (or a provided start script). A browser op
 finally/
 ├── frontend/                 # Next.js TypeScript project (static export)
 ├── backend/                  # FastAPI uv project (Python)
-│   └── db/                   # Schema definitions, seed data, migration logic
+│   └── schema/               # Schema SQL definitions and seed data
 ├── planning/                 # Project-wide documentation for agents
 │   ├── PLAN.md               # This document
 │   └── ...                   # Additional agent reference docs
@@ -101,7 +101,6 @@ finally/
 ├── db/                       # Volume mount target (SQLite file lives here at runtime)
 │   └── .gitkeep              # Directory exists in repo; finally.db is gitignored
 ├── Dockerfile                # Multi-stage build (Node → Python)
-├── docker-compose.yml        # Optional convenience wrapper
 ├── .env                      # Environment variables (gitignored, .env.example committed)
 └── .gitignore
 ```
@@ -110,7 +109,7 @@ finally/
 
 - **`frontend/`** is a self-contained Next.js project. It knows nothing about Python. It talks to the backend via `/api/*` endpoints and `/api/stream/*` SSE endpoints. Internal structure is up to the Frontend Engineer agent.
 - **`backend/`** is a self-contained uv project with its own `pyproject.toml`. It owns all server logic including database initialization, schema, seed data, API routes, SSE streaming, market data, and LLM integration. Internal structure is up to the Backend/Market Data agents.
-- **`backend/db/`** contains schema SQL definitions and seed logic. The backend lazily initializes the database on first request — creating tables and seeding default data if the SQLite file doesn't exist or is empty.
+- **`backend/schema/`** contains schema SQL definitions and seed logic. The backend initializes the database at startup — creating tables and seeding default data if the SQLite file doesn't exist or is empty.
 - **`db/`** at the top level is the runtime volume mount point. The SQLite file (`db/finally.db`) is created here by the backend and persists across container restarts via Docker volume.
 - **`planning/`** contains project-wide documentation, including this plan. All agents reference files here as the shared contract.
 - **`test/`** contains Playwright E2E tests and supporting infrastructure (e.g., `docker-compose.test.yml`). Unit tests live within `frontend/` and `backend/` respectively, following each framework's conventions.
@@ -124,9 +123,12 @@ finally/
 # Required: OpenRouter API key for LLM chat functionality
 OPENROUTER_API_KEY=your-openrouter-api-key-here
 
-# Optional: Set to "true" to use real NSE/BSE market data (free, no key needed)
+# Optional: Set to "true" to use real NSE/BSE market data via paid IndianAPI
 # If not set or "false", the built-in market simulator is used
 USE_REAL_MARKET_DATA=false
+
+# Required when USE_REAL_MARKET_DATA=true: IndianAPI key (https://stock.indianapi.in)
+INDIAN_STOCK_API_KEY=your-indian-stock-api-key-here
 
 # Optional: Set to "true" for deterministic mock LLM responses (testing)
 LLM_MOCK=false
@@ -151,26 +153,29 @@ Both the simulator and the Indian Stock Market API client implement the same abs
 
 - Generates prices using geometric Brownian motion (GBM) with configurable drift and volatility per ticker
 - Updates at ~500ms intervals
-- Correlated moves across tickers (e.g., IT stocks move together)
+- Correlated moves across tickers (e.g., IT stocks move together) — stretch goal; initial implementation uses uncorrelated GBM per ticker
 - Occasional random "events" — sudden 2-5% moves on a ticker for drama
 - Starts from realistic INR seed prices (e.g., RELIANCE ~₹2,450, TCS ~₹3,450, INFY ~₹1,560, etc.)
 - Runs as an in-process background task — no external dependencies
 
-### Indian Stock Market API (Optional, Free)
+### Indian Stock Market API (Optional, Paid)
 
-- **Base URL**: `http://65.0.104.9/`
-- **No authentication required** — completely free, no API key
-- REST API polling using the batch endpoint: `GET /stock/list?symbols=RELIANCE,TCS,INFY,...&res=num`
-- Supports NSE (`.NS` suffix) and BSE (`.BO` suffix); default is NSE
-- Poll interval: every 15 seconds (API rate limit: 60 requests/minute; cache for at least 30 seconds)
-- Response fields used: `last_price`, `change`, `percent_change`, `previous_close`, `symbol`, `exchange`
+- **Base URL**: `https://stock.indianapi.in`
+- **Authentication**: `X-Api-Key` header — API key stored in `INDIAN_STOCK_API_KEY` env var
+- REST API polling using `GET /stock?name=<ticker>` per ticker (no batch endpoint; use asyncio for concurrent polling)
+- Supports NSE and BSE; response includes `currentPrice.NSE` and `currentPrice.BSE`
+- Poll interval: every 15 seconds per ticker
+- Response fields used: `currentPrice.NSE`, `percentChange`, `tickerId`, `companyName`
 - Markets open 9:15 AM – 3:30 PM IST on weekdays; API returns last available data when closed
 - Parses REST response into the same format as the simulator
+- On connection error or timeout, the poller logs a warning and retains the last cached prices; the SSE stream continues uninterrupted with stale-but-valid data
+- Full API reference: `planning/INDIAN_STOCK_API.md`
 
 ### Shared Price Cache
 
 - A single background task (simulator or Indian Stock API poller) writes to an in-memory price cache
 - The cache holds the latest price, previous price, and timestamp for each ticker
+- The cache also maintains a rolling history buffer per ticker — the last 200 price points (~100 seconds at 500ms cadence) — used by `GET /api/prices/{ticker}/history`
 - SSE streams read from this cache and push updates to connected clients
 - This architecture supports future multi-user scenarios without changes to the data layer
 
@@ -178,7 +183,7 @@ Both the simulator and the Indian Stock Market API client implement the same abs
 
 - Endpoint: `GET /api/stream/prices`
 - Long-lived SSE connection; client uses native `EventSource` API
-- Server pushes price updates for all tickers known to the system at a regular cadence (~500ms) — in the single-user model this is equivalent to the user's watchlist
+- Server pushes price updates for all tickers currently in the watchlist at a regular cadence (~500ms). The stream reads the watchlist from the DB on each tick, so newly added tickers appear automatically within one tick — no client reconnect required.
 - Each SSE event contains ticker, price, previous price, timestamp, and change direction
 - Client handles reconnection automatically (EventSource has built-in retry)
 
@@ -188,7 +193,7 @@ Both the simulator and the Indian Stock Market API client implement the same abs
 
 ### SQLite with Lazy Initialization
 
-The backend checks for the SQLite database on startup (or first request). If the file doesn't exist or tables are missing, it creates the schema and seeds default data. This means:
+The backend initializes the SQLite database during application startup (FastAPI lifespan event). If the file doesn't exist or tables are missing, it creates the schema and seeds default data. This means:
 
 - No separate migration step
 - No manual database setup
@@ -204,20 +209,19 @@ All tables include a `user_id` column defaulting to `"default"`. This is hardcod
 - `created_at` TEXT (ISO timestamp)
 
 **watchlist** — Tickers the user is watching
-- `id` TEXT PRIMARY KEY (UUID)
+- PRIMARY KEY `(user_id, ticker)` — composite, no separate id column
 - `user_id` TEXT (default: `"default"`)
 - `ticker` TEXT
 - `added_at` TEXT (ISO timestamp)
-- UNIQUE constraint on `(user_id, ticker)`
 
 **positions** — Current holdings (one row per ticker per user)
-- `id` TEXT PRIMARY KEY (UUID)
+- PRIMARY KEY `(user_id, ticker)` — composite, no separate id column
 - `user_id` TEXT (default: `"default"`)
 - `ticker` TEXT
 - `quantity` REAL (fractional shares supported)
 - `avg_cost` REAL
 - `updated_at` TEXT (ISO timestamp)
-- UNIQUE constraint on `(user_id, ticker)`
+- When quantity reaches zero (full sell), the row is deleted.
 
 **trades** — Trade history (append-only log)
 - `id` TEXT PRIMARY KEY (UUID)
@@ -229,9 +233,9 @@ All tables include a `user_id` column defaulting to `"default"`. This is hardcod
 - `executed_at` TEXT (ISO timestamp)
 
 **portfolio_snapshots** — Portfolio value over time (for P&L chart). Recorded every 30 seconds by a background task, and immediately after each trade execution.
-- `id` TEXT PRIMARY KEY (UUID)
+- `id` INTEGER PRIMARY KEY AUTOINCREMENT
 - `user_id` TEXT (default: `"default"`)
-- `total_value` REAL
+- `total_value` REAL — `cash_balance + Σ(quantity × current_price)` for all open positions, computed from the in-memory price cache at snapshot time
 - `recorded_at` TEXT (ISO timestamp)
 
 **chat_messages** — Conversation history with LLM
@@ -255,6 +259,7 @@ All tables include a `user_id` column defaulting to `"default"`. This is hardcod
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/stream/prices` | SSE stream of live price updates |
+| GET | `/api/prices/{ticker}/history` | Recent price history for a ticker (from in-memory rolling buffer) |
 
 ### Portfolio
 | Method | Path | Description |
@@ -301,6 +306,8 @@ When the user sends a chat message, the backend:
 7. Stores the message and executed actions in `chat_messages`
 8. Returns the complete JSON response to the frontend (no token-by-token streaming — Cerebras inference is fast enough that a loading indicator is sufficient)
 
+Chat history is persisted in the database but is **not restored to the frontend on page reload** — the conversation starts fresh each session. This is intentional for simplicity; the stored history is available for future enhancement.
+
 ### Structured Output Schema
 
 The LLM is instructed to respond with JSON matching this schema:
@@ -319,7 +326,7 @@ The LLM is instructed to respond with JSON matching this schema:
 
 - `message` (required): The conversational text shown to the user
 - `trades` (optional): Array of trades to auto-execute. Each trade goes through the same validation as manual trades (sufficient cash for buys, sufficient shares for sells)
-- `watchlist_changes` (optional): Array of watchlist modifications
+- `watchlist_changes` (optional): Array of watchlist modifications. Each entry: `{"ticker": "...", "action": "add" | "remove"}`
 
 ### Auto-Execution
 
@@ -356,7 +363,7 @@ When `LLM_MOCK=true`, the backend returns deterministic mock responses instead o
 The frontend is a single-page application with a dense, terminal-inspired layout. The specific component architecture and layout system is up to the Frontend Engineer, but the UI should include these elements:
 
 - **Watchlist panel** — grid/table of watched tickers with: ticker symbol, current price (flashing green/red on change), daily change %, and a sparkline mini-chart (accumulated from SSE since page load)
-- **Main chart area** — larger chart for the currently selected ticker, with at minimum price over time. Clicking a ticker in the watchlist selects it here.
+- **Main chart area** — larger chart for the currently selected ticker showing price over time. On ticker selection, fetches recent history from `GET /api/prices/{ticker}/history` to pre-populate the chart; then appends new prices from the SSE stream. Clicking a ticker in the watchlist selects it here.
 - **Portfolio heatmap** — treemap visualization where each rectangle is a position, sized by portfolio weight, colored by P&L (green = profit, red = loss)
 - **P&L chart** — line chart showing total portfolio value over time, using data from `portfolio_snapshots`
 - **Positions table** — tabular view of all positions: ticker, quantity, avg cost, current price, unrealized P&L, % change
@@ -371,6 +378,7 @@ The frontend is a single-page application with a dense, terminal-inspired layout
 - Price flash effect: on receiving a new price, briefly apply a CSS class with background color transition, then remove it
 - All API calls go to the same origin (`/api/*`) — no CORS configuration needed
 - Tailwind CSS for styling with a custom dark theme
+- Sparkline data resets on SSE reconnect (acceptable for demo). The main chart re-fetches from `/api/prices/{ticker}/history` on reconnect to restore recent history.
 
 ---
 
@@ -450,10 +458,14 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 **Environment**: Tests run with `LLM_MOCK=true` by default for speed and determinism.
 
 **Key Scenarios**:
-- Fresh start: default watchlist appears, $10k balance shown, prices are streaming
+- Fresh start: default watchlist appears, ₹1,00,000 balance shown, prices are streaming
 - Add and remove a ticker from the watchlist
 - Buy shares: cash decreases, position appears, portfolio updates
 - Sell shares: cash increases, position updates or disappears
 - Portfolio visualization: heatmap renders with correct colors, P&L chart has data points
 - AI chat (mocked): send a message, receive a response, trade execution appears inline
 - SSE resilience: disconnect and verify reconnection
+
+---
+
+
