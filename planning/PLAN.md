@@ -4,7 +4,7 @@
 
 ## 1. Vision
 
-FinAlly (Finance Ally) is a visually stunning AI-powered trading workstation that streams live market data, lets users trade a simulated portfolio, and integrates an LLM chat assistant that can analyze positions and execute trades on the user's behalf. It looks and feels like a modern Bloomberg terminal with an AI copilot.
+FinAlly (Finance Ally) is a visually stunning AI-powered trading workstation that streams live Indian stock market data (NSE/BSE), lets users trade a simulated portfolio, and integrates an LLM chat assistant that can analyze positions and execute trades on the user's behalf. It looks and feels like a modern Bloomberg terminal with an AI copilot.
 
 This is the capstone project for an agentic AI coding course. It is built entirely by Coding Agents demonstrating how orchestrated AI agents can produce a production-quality full-stack application. Agents interact through files in `planning/`.
 
@@ -14,8 +14,8 @@ This is the capstone project for an agentic AI coding course. It is built entire
 
 The user runs a single Docker command (or a provided start script). A browser opens to `http://localhost:8000`. No login, no signup. They immediately see:
 
-- A watchlist of 10 default tickers with live-updating prices in a grid
-- $10,000 in virtual cash
+- A watchlist of 10 default Indian stocks (NSE) with live-updating prices in a grid
+- ₹1,00,000 in virtual cash (INR)
 - A dark, data-rich trading terminal aesthetic
 - An AI chat panel ready to assist
 
@@ -67,7 +67,7 @@ The user runs a single Docker command (or a provided start script). A browser op
 - **Database**: SQLite, single file at `db/finally.db`, volume-mounted for persistence
 - **Real-time data**: Server-Sent Events (SSE) — simpler than WebSockets, one-way server→client push, works everywhere
 - **AI integration**: LiteLLM → OpenRouter (Cerebras for fast inference), with structured outputs for trade execution
-- **Market data**: Environment-variable driven — simulator by default, real data via Massive API if key provided
+- **Market data**: Environment-variable driven — simulator by default, real Indian stock data via free NSE/BSE API if `USE_REAL_MARKET_DATA=true`
 
 ### Why These Choices
 
@@ -124,9 +124,9 @@ finally/
 # Required: OpenRouter API key for LLM chat functionality
 OPENROUTER_API_KEY=your-openrouter-api-key-here
 
-# Optional: Massive (Polygon.io) API key for real market data
-# If not set, the built-in market simulator is used (recommended for most users)
-MASSIVE_API_KEY=
+# Optional: Set to "true" to use real NSE/BSE market data (free, no key needed)
+# If not set or "false", the built-in market simulator is used
+USE_REAL_MARKET_DATA=false
 
 # Optional: Set to "true" for deterministic mock LLM responses (testing)
 LLM_MOCK=false
@@ -134,8 +134,8 @@ LLM_MOCK=false
 
 ### Behavior
 
-- If `MASSIVE_API_KEY` is set and non-empty → backend uses Massive REST API for market data
-- If `MASSIVE_API_KEY` is absent or empty → backend uses the built-in market simulator
+- If `USE_REAL_MARKET_DATA=true` → backend polls the free Indian Stock Market API for real NSE/BSE prices
+- If `USE_REAL_MARKET_DATA` is absent or `false` → backend uses the built-in market simulator
 - If `LLM_MOCK=true` → backend returns deterministic mock LLM responses (for E2E tests)
 - The backend reads `.env` from the project root (mounted into the container or read via docker `--env-file`)
 
@@ -145,28 +145,31 @@ LLM_MOCK=false
 
 ### Two Implementations, One Interface
 
-Both the simulator and the Massive client implement the same abstract interface. The backend selects which to use based on the environment variable. All downstream code (SSE streaming, price cache, frontend) is agnostic to the source.
+Both the simulator and the Indian Stock Market API client implement the same abstract interface. The backend selects which to use based on the environment variable. All downstream code (SSE streaming, price cache, frontend) is agnostic to the source.
 
 ### Simulator (Default)
 
 - Generates prices using geometric Brownian motion (GBM) with configurable drift and volatility per ticker
 - Updates at ~500ms intervals
-- Correlated moves across tickers (e.g., tech stocks move together)
+- Correlated moves across tickers (e.g., IT stocks move together)
 - Occasional random "events" — sudden 2-5% moves on a ticker for drama
-- Starts from realistic seed prices (e.g., AAPL ~$190, GOOGL ~$175, etc.)
+- Starts from realistic INR seed prices (e.g., RELIANCE ~₹2,450, TCS ~₹3,450, INFY ~₹1,560, etc.)
 - Runs as an in-process background task — no external dependencies
 
-### Massive API (Optional)
+### Indian Stock Market API (Optional, Free)
 
-- REST API polling (not WebSocket) — simpler, works on all tiers
-- Polls for the union of all watched tickers on a configurable interval
-- Free tier (5 calls/min): poll every 15 seconds
-- Paid tiers: poll every 2-15 seconds depending on tier
+- **Base URL**: `http://65.0.104.9/`
+- **No authentication required** — completely free, no API key
+- REST API polling using the batch endpoint: `GET /stock/list?symbols=RELIANCE,TCS,INFY,...&res=num`
+- Supports NSE (`.NS` suffix) and BSE (`.BO` suffix); default is NSE
+- Poll interval: every 15 seconds (API rate limit: 60 requests/minute; cache for at least 30 seconds)
+- Response fields used: `last_price`, `change`, `percent_change`, `previous_close`, `symbol`, `exchange`
+- Markets open 9:15 AM – 3:30 PM IST on weekdays; API returns last available data when closed
 - Parses REST response into the same format as the simulator
 
 ### Shared Price Cache
 
-- A single background task (simulator or Massive poller) writes to an in-memory price cache
+- A single background task (simulator or Indian Stock API poller) writes to an in-memory price cache
 - The cache holds the latest price, previous price, and timestamp for each ticker
 - SSE streams read from this cache and push updates to connected clients
 - This architecture supports future multi-user scenarios without changes to the data layer
@@ -197,7 +200,7 @@ All tables include a `user_id` column defaulting to `"default"`. This is hardcod
 
 **users_profile** — User state (cash balance)
 - `id` TEXT PRIMARY KEY (default: `"default"`)
-- `cash_balance` REAL (default: `10000.0`)
+- `cash_balance` REAL (default: `100000.0`) — ₹1,00,000 INR
 - `created_at` TEXT (ISO timestamp)
 
 **watchlist** — Tickers the user is watching
@@ -241,8 +244,8 @@ All tables include a `user_id` column defaulting to `"default"`. This is hardcod
 
 ### Default Seed Data
 
-- One user profile: `id="default"`, `cash_balance=10000.0`
-- Ten watchlist entries: AAPL, GOOGL, MSFT, AMZN, TSLA, NVDA, META, JPM, V, NFLX
+- One user profile: `id="default"`, `cash_balance=100000.0` (₹1,00,000 INR)
+- Ten watchlist entries (NSE): RELIANCE, TCS, HDFCBANK, INFY, ICICIBANK, BHARTIARTL, SBIN, ITC, LT, HINDUNILVR
 
 ---
 
@@ -306,10 +309,10 @@ The LLM is instructed to respond with JSON matching this schema:
 {
   "message": "Your conversational response to the user",
   "trades": [
-    {"ticker": "AAPL", "side": "buy", "quantity": 10}
+    {"ticker": "RELIANCE", "side": "buy", "quantity": 10}
   ],
   "watchlist_changes": [
-    {"ticker": "PYPL", "action": "add"}
+    {"ticker": "BAJFINANCE", "action": "add"}
   ]
 }
 ```
@@ -428,7 +431,7 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 ### Unit Tests (within `frontend/` and `backend/`)
 
 **Backend (pytest)**:
-- Market data: simulator generates valid prices, GBM math is correct, Massive API response parsing works, both implementations conform to the abstract interface
+- Market data: simulator generates valid prices, GBM math is correct, Indian Stock Market API response parsing works, both implementations conform to the abstract interface
 - Portfolio: trade execution logic, P&L calculations, edge cases (selling more than owned, buying with insufficient cash, selling at a loss)
 - LLM: structured output parsing handles all valid schemas, graceful handling of malformed responses, trade validation within chat flow
 - API routes: correct status codes, response shapes, error handling
