@@ -1,46 +1,57 @@
 # FinAlly — AI Trading Workstation
 
-A Bloomberg-style trading terminal for Indian stocks (NSE/BSE) with an AI assistant that can analyze your portfolio and execute trades via natural language.
-
-## Features
-
-- Live price streaming via SSE (real NSE/BSE data or built-in simulator)
-- ₹1,00,000 virtual cash, market orders, instant fills
-- Watchlist with sparklines, price flash animations
-- Portfolio heatmap (treemap), P&L chart, positions table
-- AI chat (Cerebras via OpenRouter) — asks questions, executes trades, manages watchlist
+An AI-powered trading workstation for Indian stock markets (NSE/BSE). Streams live prices, simulates a ₹1,00,000 portfolio, and integrates an LLM chat assistant that can analyze positions and execute trades.
 
 ## Quick Start
 
 ```bash
 cp .env.example .env
-# Edit .env and set OPENROUTER_API_KEY
-./scripts/start_mac.sh
+# Edit .env — add your OPENROUTER_API_KEY
+bash scripts/start_mac.sh
 ```
 
-Open http://localhost:8000.
+Open [http://localhost:8000](http://localhost:8000).
+
+## Features
+
+- Live NSE/BSE price streaming via SSE with flash animations
+- Simulated ₹1,00,000 portfolio — buy/sell at market price instantly
+- Portfolio heatmap (treemap), P&L chart, positions table
+- AI chat assistant (FinAlly) — analyzes your portfolio and executes trades on request
+- Watchlist management — manual or via AI
 
 ## Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `OPENROUTER_API_KEY` | Yes | OpenRouter API key for AI chat |
-| `USE_REAL_MARKET_DATA` | No | Set `true` to use live NSE/BSE prices |
-| `INDIAN_STOCK_API_KEY` | If above is true | API key from stock.indianapi.in |
-| `LLM_MOCK` | No | Set `true` for deterministic mock LLM (testing) |
+| `OPENROUTER_API_KEY` | Yes | OpenRouter API key for LLM chat |
+| `USE_REAL_MARKET_DATA` | No | `true` to use live NSE/BSE data (default: simulator) |
+| `INDIAN_STOCK_API_KEY` | If above is true | IndianAPI key for real market data |
+| `LLM_MOCK` | No | `true` for deterministic mock responses (testing) |
 
 ## Stack
 
-- **Frontend**: Next.js (TypeScript, static export)
-- **Backend**: FastAPI + Python (uv)
-- **Database**: SQLite
-- **AI**: LiteLLM → OpenRouter → Cerebras (`openrouter/openai/gpt-oss-120b`)
-- **Deployment**: Single Docker container on port 8000
+- **Frontend**: Next.js (TypeScript), static export, served by FastAPI
+- **Backend**: FastAPI (Python/uv), SQLite, SSE streaming
+- **AI**: LiteLLM → OpenRouter (Cerebras inference)
+- **Market data**: GBM simulator (default) or live IndianAPI
 
-## Scripts
+## Development
 
 ```bash
-./scripts/start_mac.sh        # Build and run
-./scripts/start_mac.sh --build # Force rebuild
-./scripts/stop_mac.sh         # Stop container (data persists)
+# Backend
+cd backend && uv run uvicorn app.main:app --reload
+
+# Frontend
+cd frontend && npm install && npm run dev
+```
+
+## Testing
+
+```bash
+# Backend unit tests
+cd backend && uv run pytest
+
+# E2E (requires Docker)
+cd test && docker compose -f docker-compose.test.yml up
 ```

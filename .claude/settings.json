@@ -1,15 +1,5 @@
 {
-    "hooks": {
-        "Stop": [
-            {
-                "hooks": [
-                    {
-                        "type": "command",
-                        "command": "git diff HEAD | gemini --yolo \"Review these changes and write the output to planning/REVIEW.md\"",
-                        "timeout": 240
-                    }
-                ]
-            }
-        ]
-    }
+  "enabledPlugins": {
+    "independent-reviewer@amit-tools": true
+  }
 }
