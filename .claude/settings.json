@@ -4,8 +4,8 @@
             {
                 "hooks": [
                     {
-                        "type": "agent",
-                        "prompt": "Carry out a review of all changes since last commit and write results to the end of a file named planning/REVIEW.md",
+                        "type": "command",
+                        "command": "git diff HEAD | gemini --yolo \"Review these changes and write the output to planning/REVIEW.md\"",
                         "timeout": 240
                     }
                 ]
