@@ -1,5 +1,3 @@
 {
-  "enabledPlugins": {
-    "independent-reviewer@amit-tools": true
-  }
+  "enabledPlugins": {}
 }
