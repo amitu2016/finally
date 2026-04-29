@@ -26,7 +26,13 @@ MIN_CALL_INTERVAL = 1.0     # hard rate limit: at most 1 request per second
 # poll interval is calculated against real runtime rather than 24/7.
 # Examples: 4 → ~96s interval, 2 → ~48s interval (each ticker refreshes
 # every interval × number_of_tickers seconds).
-_daily_hours = float(os.getenv("DAILY_RUNTIME_HOURS", "24"))
+try:
+    _daily_hours = float(os.getenv("DAILY_RUNTIME_HOURS") or "24")
+    if _daily_hours <= 0:
+        raise ValueError("must be positive")
+except ValueError:
+    logger.warning("Invalid DAILY_RUNTIME_HOURS value; defaulting to 24")
+    _daily_hours = 24.0
 SECONDS_PER_MONTH = 30 * _daily_hours * 3600
 
 # Minimum wait between consecutive API calls to stay within monthly quota.
