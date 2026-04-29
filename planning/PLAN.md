@@ -88,9 +88,29 @@ The user runs a single Docker command (or a provided start script). A browser op
 finally/
 ├── frontend/                 # Next.js TypeScript project (static export)
 ├── backend/                  # FastAPI uv project (Python)
-│   └── schema/               # Schema SQL definitions and seed data
+│   ├── market/               # Market data abstraction layer (IMPLEMENTED)
+│   │   ├── __init__.py       # Public API exports
+│   │   ├── base.py           # Abstract MarketDataProvider interface
+│   │   ├── types.py          # StockPrice dataclass
+│   │   ├── simulator.py      # GBM-based simulator provider
+│   │   ├── indian_api.py     # IndianAPI.in polling provider
+│   │   ├── fallback.py       # FallbackProvider (IndianAPI + simulator standby)
+│   │   └── factory.py        # Environment-driven provider selection
+│   ├── tests/                # Backend unit tests (IMPLEMENTED)
+│   │   ├── test_factory.py
+│   │   ├── test_simulator.py
+│   │   ├── test_indian_api.py
+│   │   ├── test_fallback.py
+│   │   └── test_market_interface.py
+│   ├── schema/               # Schema SQL definitions and seed data
+│   ├── conftest.py           # pytest configuration
+│   └── pyproject.toml        # Python project manifest
 ├── planning/                 # Project-wide documentation for agents
 │   ├── PLAN.md               # This document
+│   ├── MARKET_DATA_DESIGN.md # Complete market data implementation design
+│   ├── MARKET_INTERFACE.md   # Abstract MarketDataProvider interface specification
+│   ├── MARKET_SIMULATOR.md   # GBM simulator algorithm details
+│   ├── INDIAN_API.md         # IndianAPI endpoint reference and rate-limit strategy
 │   └── ...                   # Additional agent reference docs
 ├── scripts/
 │   ├── start_mac.sh          # Launch Docker container (macOS/Linux)
@@ -123,11 +143,9 @@ finally/
 # Required: OpenRouter API key for LLM chat functionality
 OPENROUTER_API_KEY=your-openrouter-api-key-here
 
-# Optional: Set to "true" to use real NSE/BSE market data via paid IndianAPI
-# If not set or "false", the built-in market simulator is used
-USE_REAL_MARKET_DATA=false
-
-# Required when USE_REAL_MARKET_DATA=true: IndianAPI key (https://stock.indianapi.in)
+# Optional: IndianAPI key (https://stock.indianapi.in) for real NSE/BSE market data.
+# If set → backend uses FallbackProvider (IndianAPI with automatic simulator fallback)
+# If absent → backend uses SimulatorProvider only (GBM-based mock)
 INDIAN_STOCK_API_KEY=your-indian-stock-api-key-here
 
 # Optional: Set to "true" for deterministic mock LLM responses (testing)
@@ -136,48 +154,92 @@ LLM_MOCK=false
 
 ### Behavior
 
-- If `USE_REAL_MARKET_DATA=true` → backend polls the free Indian Stock Market API for real NSE/BSE prices
-- If `USE_REAL_MARKET_DATA` is absent or `false` → backend uses the built-in market simulator
+- If `INDIAN_STOCK_API_KEY` is set → backend uses `FallbackProvider` (IndianAPIProvider as primary, SimulatorProvider as automatic warm standby)
+- If `INDIAN_STOCK_API_KEY` is absent → backend uses `SimulatorProvider` only
 - If `LLM_MOCK=true` → backend returns deterministic mock LLM responses (for E2E tests)
 - The backend reads `.env` from the project root (mounted into the container or read via docker `--env-file`)
+
+> **Implementation note**: The original design used a `USE_REAL_MARKET_DATA` boolean flag to toggle market data sources. The implemented factory (`backend/market/factory.py`) instead uses the presence of `INDIAN_STOCK_API_KEY` directly as the selector — simpler and avoids inconsistency between the flag and the key.
 
 ---
 
 ## 6. Market Data
 
-### Two Implementations, One Interface
+### Three Implementations, One Interface (IMPLEMENTED)
 
-Both the simulator and the Indian Stock Market API client implement the same abstract interface. The backend selects which to use based on the environment variable. All downstream code (SSE streaming, price cache, frontend) is agnostic to the source.
+All market data providers implement the `MarketDataProvider` abstract base class defined in `backend/market/base.py`. The interface exposes:
 
-### Simulator (Default)
+- `start()` / `stop()` — async lifecycle management
+- `get_price(ticker)` → `StockPrice | None`
+- `get_all_prices()` → `dict[str, StockPrice]`
+- `get_history(ticker, limit)` → `list[StockPrice]`
+- `set_tickers(tickers)` — update tracked ticker set
 
-- Generates prices using geometric Brownian motion (GBM) with configurable drift and volatility per ticker
-- Updates at ~500ms intervals
-- Correlated moves across tickers (e.g., IT stocks move together) — stretch goal; initial implementation uses uncorrelated GBM per ticker
-- Occasional random "events" — sudden 2-5% moves on a ticker for drama
-- Starts from realistic INR seed prices (e.g., RELIANCE ~₹2,450, TCS ~₹3,450, INFY ~₹1,560, etc.)
-- Runs as an in-process background task — no external dependencies
+The `StockPrice` dataclass (`backend/market/types.py`) carries: `ticker`, `price`, `prev_price`, `change_pct`, `timestamp`, `company_name`.
 
-### Indian Stock Market API (Optional, Paid)
+All downstream code (SSE streaming, portfolio snapshots, REST endpoints) is completely agnostic to which provider is active.
+
+### Simulator (Default) — `SimulatorProvider` (IMPLEMENTED)
+
+Located in `backend/market/simulator.py`.
+
+- Generates prices using geometric Brownian motion (GBM) — `price * exp((drift - 0.5σ²)dt + σ√dt·Z)`
+- Updates at ~500ms intervals (`TICK_INTERVAL = 0.5`)
+- Per-ticker annualized volatility: ITC/HINDUNILVR 0.18 (low), RELIANCE/TCS 0.20–0.22 (mid), SBIN 0.32 (high)
+- Occasional random "events" — sudden ±2–5% jumps (~once per 60s per ticker)
+- Starts from realistic INR seed prices (RELIANCE ₹2,450, TCS ₹3,450, HDFCBANK ₹1,580, INFY ₹1,560, etc.)
+- Runs as an async background task — no external dependencies
+- Rolling 200-tick history buffer per ticker
+
+### Indian Stock Market API — `IndianAPIProvider` (IMPLEMENTED)
+
+Located in `backend/market/indian_api.py`. Full API reference: `planning/INDIAN_API.md`.
 
 - **Base URL**: `https://stock.indianapi.in`
-- **Authentication**: `X-Api-Key` header — API key stored in `INDIAN_STOCK_API_KEY` env var
-- REST API polling using `GET /stock?name=<ticker>` per ticker (no batch endpoint; use asyncio for concurrent polling)
-- Supports NSE and BSE; response includes `currentPrice.NSE` and `currentPrice.BSE`
-- Poll interval: every 15 seconds per ticker
-- Response fields used: `currentPrice.NSE`, `percentChange`, `tickerId`, `companyName`
-- Markets open 9:15 AM – 3:30 PM IST on weekdays; API returns last available data when closed
-- Parses REST response into the same format as the simulator
-- On connection error or timeout, the poller logs a warning and retains the last cached prices; the SSE stream continues uninterrupted with stale-but-valid data
-- Full API reference: `planning/INDIAN_STOCK_API.md`
+- **Authentication**: `X-Api-Key` header — API key from `INDIAN_STOCK_API_KEY` env var
+- REST API polling using `GET /stock?name=<ticker>` per ticker
+- Prefers `currentPrice.NSE`; falls back to `currentPrice.BSE` if NSE unavailable
+- Response fields used: `currentPrice.NSE/BSE`, `percentChange`, `companyName`
+
+**Rate-limit management** (key implementation detail):
+- Monthly quota: 5,000 calls/month with 90% safety factor → effective budget ~4,500 calls
+- `QUOTA_CALL_INTERVAL ≈ 576s` — minimum wait between consecutive API calls
+- **Round-robin single-ticker polling** (not concurrent) to strictly honor rate limits
+- With 10 tickers, each is refreshed ~every 96 minutes (576s × 10)
+- HTTP 429 response → marks provider as `is_rate_limited = True`
+- Exponential backoff on consecutive failures, capped at 1 hour
+- Random ±10s jitter added to each sleep to avoid thundering herd
+- Monthly quota resets automatically on calendar-month rollover
+- `get_quota_status()` returns usage stats (calls used, remaining, quota month)
+- On any error, logs a warning and retains last cached prices; SSE stream continues uninterrupted
+
+### Fallback Provider — `FallbackProvider` (IMPLEMENTED, new in recent PRs)
+
+Located in `backend/market/fallback.py`. This provider was added beyond the original design spec.
+
+- Wraps `IndianAPIProvider` as primary with `SimulatorProvider` as automatic warm standby
+- **Simulator starts immediately** at `start()` — no cold-start delay if API becomes rate-limited
+- Background monitor task (30s interval) checks `IndianAPIProvider.is_rate_limited`
+- On rate-limit or quota exhaustion → transparently switches all data reads to the simulator
+- Fallback is **permanent** for the lifetime of the instance; restart to re-attempt the real API
+- `set_tickers()` propagates to both underlying providers simultaneously
+
+### Provider Selection — `create_market_provider()` (IMPLEMENTED)
+
+Located in `backend/market/factory.py`.
+
+```python
+INDIAN_STOCK_API_KEY set → FallbackProvider(api_key)   # IndianAPI + auto-fallback to simulator
+INDIAN_STOCK_API_KEY absent → SimulatorProvider()        # GBM simulation only
+```
 
 ### Shared Price Cache
 
-- A single background task (simulator or Indian Stock API poller) writes to an in-memory price cache
-- The cache holds the latest price, previous price, and timestamp for each ticker
-- The cache also maintains a rolling history buffer per ticker — the last 200 price points (~100 seconds at 500ms cadence) — used by `GET /api/prices/{ticker}/history`
-- SSE streams read from this cache and push updates to connected clients
-- This architecture supports future multi-user scenarios without changes to the data layer
+- Each provider maintains its own in-memory cache (`dict[str, StockPrice]`) and rolling history buffer (`dict[str, list[StockPrice]]`)
+- The cache holds: latest `StockPrice` per ticker (price, prev_price, change_pct, timestamp, company_name)
+- Rolling history: last 200 price points per ticker (`HISTORY_LIMIT = 200`)
+- SSE streams read from the active provider's cache and push updates to connected clients
+- `set_tickers()` is called at startup and on every watchlist change; the provider self-manages additions and removals
 
 ### SSE Streaming
 
@@ -186,6 +248,7 @@ Both the simulator and the Indian Stock Market API client implement the same abs
 - Server pushes price updates for all tickers currently in the watchlist at a regular cadence (~500ms). The stream reads the watchlist from the DB on each tick, so newly added tickers appear automatically within one tick — no client reconnect required.
 - Each SSE event contains ticker, price, previous price, timestamp, and change direction
 - Client handles reconnection automatically (EventSource has built-in retry)
+- The market provider supplies prices via `get_all_prices()` — agnostic to whether data comes from SimulatorProvider, IndianAPIProvider, or FallbackProvider
 
 ---
 
@@ -465,6 +528,45 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 - Portfolio visualization: heatmap renders with correct colors, P&L chart has data points
 - AI chat (mocked): send a message, receive a response, trade execution appears inline
 - SSE resilience: disconnect and verify reconnection
+
+---
+
+## 13. Implementation Status
+
+This section tracks what has been built versus what remains planned.
+
+### ✅ Implemented (Market Data Layer — PRs #10–13)
+
+| Component | File | Status |
+|---|---|---|
+| Abstract interface | `backend/market/base.py` | ✅ Done |
+| StockPrice dataclass | `backend/market/types.py` | ✅ Done |
+| GBM simulator | `backend/market/simulator.py` | ✅ Done |
+| IndianAPI client | `backend/market/indian_api.py` | ✅ Done |
+| Fallback provider | `backend/market/fallback.py` | ✅ Done |
+| Provider factory | `backend/market/factory.py` | ✅ Done |
+| Market interface tests | `backend/tests/test_market_interface.py` | ✅ Done |
+| Simulator tests | `backend/tests/test_simulator.py` | ✅ Done |
+| IndianAPI tests | `backend/tests/test_indian_api.py` | ✅ Done |
+| Fallback tests | `backend/tests/test_fallback.py` | ✅ Done |
+| Factory tests | `backend/tests/test_factory.py` | ✅ Done |
+| Planning docs | `planning/MARKET_DATA_DESIGN.md`, `MARKET_INTERFACE.md`, `MARKET_SIMULATOR.md`, `INDIAN_API.md` | ✅ Done |
+
+### ❌ Not Yet Implemented
+
+| Component | Notes |
+|---|---|
+| FastAPI application | `backend/app/main.py` — lifespan, routes, SSE |
+| REST API endpoints | All `/api/*` routes |
+| SQLite database layer | Schema creation, seed data, ORM queries |
+| LLM chat integration | LiteLLM → OpenRouter → Cerebras, structured output |
+| Portfolio management | Trade execution, positions, cash balance |
+| Watchlist CRUD | DB-backed add/remove with SSE integration |
+| Portfolio snapshots | Background task + `/api/portfolio/history` |
+| Frontend | Next.js project, all React components |
+| Dockerfile | Multi-stage build (Node → Python) |
+| Start/stop scripts | `scripts/start_mac.sh`, `start_windows.ps1`, etc. |
+| E2E tests | Playwright test suite in `test/` |
 
 ---
 
