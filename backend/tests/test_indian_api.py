@@ -580,3 +580,46 @@ def test_quota_call_interval_within_monthly_budget():
 
     calls_per_month = SECONDS_PER_MONTH / QUOTA_CALL_INTERVAL
     assert calls_per_month <= MONTHLY_QUOTA
+
+
+# ── DAILY_RUNTIME_HOURS parsing ──────────────────────────────────────────────
+
+
+def test_daily_runtime_hours_invalid_string_defaults_to_24(monkeypatch):
+    monkeypatch.setenv("DAILY_RUNTIME_HOURS", "not-a-number")
+    import importlib
+    import market.indian_api as m
+    importlib.reload(m)
+    assert m._daily_hours == 24.0
+
+
+def test_daily_runtime_hours_empty_string_defaults_to_24(monkeypatch):
+    monkeypatch.setenv("DAILY_RUNTIME_HOURS", "")
+    import importlib
+    import market.indian_api as m
+    importlib.reload(m)
+    assert m._daily_hours == 24.0
+
+
+def test_daily_runtime_hours_zero_defaults_to_24(monkeypatch):
+    monkeypatch.setenv("DAILY_RUNTIME_HOURS", "0")
+    import importlib
+    import market.indian_api as m
+    importlib.reload(m)
+    assert m._daily_hours == 24.0
+
+
+def test_daily_runtime_hours_negative_defaults_to_24(monkeypatch):
+    monkeypatch.setenv("DAILY_RUNTIME_HOURS", "-3")
+    import importlib
+    import market.indian_api as m
+    importlib.reload(m)
+    assert m._daily_hours == 24.0
+
+
+def test_daily_runtime_hours_valid_value_is_used(monkeypatch):
+    monkeypatch.setenv("DAILY_RUNTIME_HOURS", "4")
+    import importlib
+    import market.indian_api as m
+    importlib.reload(m)
+    assert m._daily_hours == 4.0
