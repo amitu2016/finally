@@ -85,6 +85,12 @@ class IndianAPIProvider(MarketDataProvider):
         now = datetime.now(timezone.utc)
         self._quota_month: tuple[int, int] = (now.year, now.month)
         self._calls_this_month: int = 0
+        self._is_rate_limited: bool = False
+
+    @property
+    def is_rate_limited(self) -> bool:
+        """True when the API is rate-limited (HTTP 429) or the monthly quota is exhausted."""
+        return self._is_rate_limited or self._calls_this_month >= MONTHLY_QUOTA
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
@@ -126,6 +132,7 @@ class IndianAPIProvider(MarketDataProvider):
         current_month = (now.year, now.month)
         if current_month != self._quota_month:
             self._calls_this_month = 0
+            self._is_rate_limited = False
             self._quota_month = current_month
             logger.info(
                 "Monthly API quota reset for %04d-%02d",
@@ -174,6 +181,7 @@ class IndianAPIProvider(MarketDataProvider):
                 # Enforce monthly quota before making a call
                 self._maybe_reset_monthly_quota()
                 if self._calls_this_month >= MONTHLY_QUOTA:
+                    self._is_rate_limited = True
                     logger.warning(
                         "Monthly API quota of %d calls exhausted (%d used). "
                         "Polling paused until next month.",
@@ -216,6 +224,17 @@ class IndianAPIProvider(MarketDataProvider):
         self._calls_this_month += 1
         try:
             data = await _fetch_one(client, ticker, self._api_key)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                self._is_rate_limited = True
+                logger.warning(
+                    "IndianAPI rate limit hit (HTTP 429) for %s. "
+                    "Provider marked as rate-limited.",
+                    ticker,
+                )
+            else:
+                logger.warning("IndianAPI poll failed for %s: %s", ticker, exc)
+            return False
         except Exception as exc:
             logger.warning("IndianAPI poll failed for %s: %s", ticker, exc)
             return False

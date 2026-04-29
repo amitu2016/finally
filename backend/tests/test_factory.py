@@ -1,7 +1,7 @@
 import pytest
 
 from market.factory import create_market_provider
-from market.indian_api import IndianAPIProvider
+from market.fallback import FallbackProvider
 from market.simulator import SimulatorProvider
 
 
@@ -11,17 +11,17 @@ def test_factory_returns_simulator_without_key(monkeypatch):
     assert isinstance(provider, SimulatorProvider)
 
 
-def test_factory_returns_indian_api_with_key(monkeypatch):
+def test_factory_returns_fallback_provider_with_key(monkeypatch):
     monkeypatch.setenv("INDIAN_STOCK_API_KEY", "test-key-123")
     provider = create_market_provider()
-    assert isinstance(provider, IndianAPIProvider)
+    assert isinstance(provider, FallbackProvider)
 
 
-def test_factory_indian_api_receives_key(monkeypatch):
+def test_factory_fallback_provider_wraps_indian_api_with_key(monkeypatch):
     monkeypatch.setenv("INDIAN_STOCK_API_KEY", "secret-key-abc")
     provider = create_market_provider()
-    assert isinstance(provider, IndianAPIProvider)
-    assert provider._api_key == "secret-key-abc"
+    assert isinstance(provider, FallbackProvider)
+    assert provider._primary._api_key == "secret-key-abc"
 
 
 def test_factory_returns_new_instance_each_call(monkeypatch):
