@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 from datetime import datetime, timezone
 
 import httpx
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://stock.indianapi.in"
 POLL_INTERVAL = 15
+MAX_POLL_INTERVAL = 300
+POLL_JITTER = 5.0
 REQUEST_TIMEOUT = 10.0
 HISTORY_LIMIT = 200
 
@@ -22,7 +25,11 @@ def _parse_response(ticker: str, data: dict, prev: StockPrice | None) -> StockPr
     if not price_raw:
         return None
 
-    price = float(price_raw)
+    try:
+        price = float(price_raw)
+    except (TypeError, ValueError):
+        return None
+
     if price <= 0:
         return None
 
@@ -57,6 +64,8 @@ class IndianAPIProvider(MarketDataProvider):
         self._task: asyncio.Task | None = None
 
     async def start(self) -> None:
+        if self._task is not None and not self._task.done():
+            return
         self._task = asyncio.create_task(self._poll_loop())
 
     async def stop(self) -> None:
@@ -66,6 +75,7 @@ class IndianAPIProvider(MarketDataProvider):
                 await self._task
             except asyncio.CancelledError:
                 pass
+            self._task = None
 
     def get_price(self, ticker: str) -> StockPrice | None:
         return self._cache.get(ticker)
@@ -77,20 +87,37 @@ class IndianAPIProvider(MarketDataProvider):
         return list(self._history.get(ticker, []))[-limit:]
 
     def set_tickers(self, tickers: list[str]) -> None:
+        removed = set(self._tickers) - set(tickers)
+        for ticker in removed:
+            self._cache.pop(ticker, None)
+            self._history.pop(ticker, None)
         self._tickers = list(tickers)
 
     async def _poll_loop(self) -> None:
+        consecutive_failures = 0
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
             while True:
                 if self._tickers:
-                    await self._poll_all(client)
-                await asyncio.sleep(POLL_INTERVAL)
+                    successes = await self._poll_all(client)
+                    if successes == 0:
+                        consecutive_failures += 1
+                    else:
+                        consecutive_failures = 0
+                else:
+                    consecutive_failures = 0
+                delay = min(POLL_INTERVAL * (2 ** consecutive_failures), MAX_POLL_INTERVAL)
+                delay += random.uniform(0, POLL_JITTER)
+                await asyncio.sleep(delay)
 
-    async def _poll_all(self, client: httpx.AsyncClient) -> None:
-        """Fetch all tickers concurrently; log errors without interrupting the stream."""
+    async def _poll_all(self, client: httpx.AsyncClient) -> int:
+        """Fetch all tickers concurrently; log errors without interrupting the stream.
+
+        Returns the number of tickers successfully updated.
+        """
         tasks = [_fetch_one(client, t, self._api_key) for t in self._tickers]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        successes = 0
         for ticker, result in zip(self._tickers, results):
             if isinstance(result, Exception):
                 logger.warning("IndianAPI poll failed for %s: %s", ticker, result)
@@ -107,3 +134,6 @@ class IndianAPIProvider(MarketDataProvider):
             buf.append(sp)
             if len(buf) > HISTORY_LIMIT:
                 self._history[ticker] = buf[-HISTORY_LIMIT:]
+            successes += 1
+
+        return successes

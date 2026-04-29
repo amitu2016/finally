@@ -271,3 +271,81 @@ def test_dt_is_small_positive():
 def test_all_ticker_vols_present():
     for ticker in SEED_PRICES:
         assert ticker in TICKER_VOL
+
+
+# ── SimulatorProvider: set_tickers prunes stale state ────────────────────────
+
+
+def test_set_tickers_prunes_stale_cache():
+    provider = SimulatorProvider()
+    provider.set_tickers(["RELIANCE", "TCS"])
+    assert provider.get_price("RELIANCE") is not None
+
+    provider.set_tickers(["TCS"])
+    assert provider.get_price("RELIANCE") is None
+    assert "RELIANCE" not in provider.get_all_prices()
+
+
+def test_set_tickers_prunes_stale_history():
+    provider = SimulatorProvider()
+    provider.set_tickers(["RELIANCE", "TCS"])
+    for _ in range(5):
+        provider._tick()
+    assert len(provider.get_history("RELIANCE")) > 0
+
+    provider.set_tickers(["TCS"])
+    assert provider.get_history("RELIANCE") == []
+    assert "RELIANCE" not in provider._history
+
+
+def test_set_tickers_keeps_retained_tickers():
+    provider = SimulatorProvider()
+    provider.set_tickers(["RELIANCE", "TCS"])
+    for _ in range(3):
+        provider._tick()
+
+    provider.set_tickers(["TCS"])
+    assert provider.get_price("TCS") is not None
+    assert len(provider.get_history("TCS")) == 3
+
+
+# ── SimulatorProvider: double-start guard ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_double_start_does_not_create_duplicate_task():
+    provider = SimulatorProvider()
+    provider.set_tickers(["RELIANCE"])
+
+    await provider.start()
+    task_first = provider._task
+
+    await provider.start()
+    assert provider._task is task_first
+
+    await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_task_is_none_after_stop():
+    provider = SimulatorProvider()
+    provider.set_tickers(["RELIANCE"])
+    await provider.start()
+    await provider.stop()
+    assert provider._task is None
+
+
+@pytest.mark.asyncio
+async def test_restart_after_stop_creates_new_task():
+    provider = SimulatorProvider()
+    provider.set_tickers(["RELIANCE"])
+
+    await provider.start()
+    await provider.stop()
+    assert provider._task is None
+
+    await provider.start()
+    assert provider._task is not None
+    assert not provider._task.done()
+
+    await provider.stop()

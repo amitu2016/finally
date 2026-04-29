@@ -73,6 +73,8 @@ class SimulatorProvider(MarketDataProvider):
         self._task: asyncio.Task | None = None
 
     async def start(self) -> None:
+        if self._task is not None and not self._task.done():
+            return
         self._task = asyncio.create_task(self._simulate_loop())
 
     async def stop(self) -> None:
@@ -82,6 +84,7 @@ class SimulatorProvider(MarketDataProvider):
                 await self._task
             except asyncio.CancelledError:
                 pass
+            self._task = None
 
     def get_price(self, ticker: str) -> StockPrice | None:
         return self._cache.get(ticker)
@@ -93,6 +96,11 @@ class SimulatorProvider(MarketDataProvider):
         return list(self._history.get(ticker, []))[-limit:]
 
     def set_tickers(self, tickers: list[str]) -> None:
+        removed = set(self._tickers) - set(tickers)
+        for ticker in removed:
+            self._cache.pop(ticker, None)
+            self._history.pop(ticker, None)
+
         now = datetime.now(timezone.utc)
         for ticker in tickers:
             if ticker not in self._cache:
