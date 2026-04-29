@@ -6,6 +6,8 @@ import respx
 
 from market.indian_api import (
     BASE_URL,
+    MONTHLY_QUOTA,
+    QUOTA_CALL_INTERVAL,
     IndianAPIProvider,
     _fetch_one,
     _parse_response,
@@ -438,3 +440,143 @@ async def test_poll_all_returns_zero_on_all_failures():
         count = await provider._poll_all(client)
 
     assert count == 0
+
+
+# ── _poll_one ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_one_success_returns_true():
+    respx.get(f"{BASE_URL}/stock").mock(
+        return_value=httpx.Response(200, json=SAMPLE_RESPONSE)
+    )
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    async with httpx.AsyncClient() as client:
+        result = await provider._poll_one(client, "RELIANCE")
+    assert result is True
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_one_failure_returns_false():
+    respx.get(f"{BASE_URL}/stock").mock(return_value=httpx.Response(500))
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    async with httpx.AsyncClient() as client:
+        result = await provider._poll_one(client, "RELIANCE")
+    assert result is False
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_one_populates_cache():
+    respx.get(f"{BASE_URL}/stock").mock(
+        return_value=httpx.Response(200, json=SAMPLE_RESPONSE)
+    )
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    async with httpx.AsyncClient() as client:
+        await provider._poll_one(client, "RELIANCE")
+    sp = provider.get_price("RELIANCE")
+    assert sp is not None
+    assert sp.price == 2195.75
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_one_increments_quota_counter_on_success():
+    respx.get(f"{BASE_URL}/stock").mock(
+        return_value=httpx.Response(200, json=SAMPLE_RESPONSE)
+    )
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    assert provider._calls_this_month == 0
+    async with httpx.AsyncClient() as client:
+        await provider._poll_one(client, "RELIANCE")
+    assert provider._calls_this_month == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_one_increments_quota_counter_on_failure():
+    # Counter increments even when the request fails (still costs quota)
+    respx.get(f"{BASE_URL}/stock").mock(return_value=httpx.Response(429))
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    async with httpx.AsyncClient() as client:
+        await provider._poll_one(client, "RELIANCE")
+    assert provider._calls_this_month == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_one_accumulates_history():
+    respx.get(f"{BASE_URL}/stock").mock(
+        return_value=httpx.Response(200, json=SAMPLE_RESPONSE)
+    )
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    async with httpx.AsyncClient() as client:
+        await provider._poll_one(client, "RELIANCE")
+        await provider._poll_one(client, "RELIANCE")
+    assert len(provider.get_history("RELIANCE")) == 2
+
+
+# ── Quota tracking ───────────────────────────────────────────────────────────
+
+
+def test_get_quota_status_initial():
+    provider = IndianAPIProvider("test-key")
+    status = provider.get_quota_status()
+    assert status["calls_this_month"] == 0
+    assert status["monthly_quota"] == MONTHLY_QUOTA
+    assert status["calls_remaining"] == MONTHLY_QUOTA
+
+
+def test_get_quota_status_decrements_remaining():
+    provider = IndianAPIProvider("test-key")
+    provider._calls_this_month = 100
+    status = provider.get_quota_status()
+    assert status["calls_remaining"] == MONTHLY_QUOTA - 100
+
+
+def test_get_quota_status_remaining_floor_at_zero():
+    provider = IndianAPIProvider("test-key")
+    provider._calls_this_month = MONTHLY_QUOTA + 50
+    status = provider.get_quota_status()
+    assert status["calls_remaining"] == 0
+
+
+def test_quota_resets_on_new_month():
+    provider = IndianAPIProvider("test-key")
+    # Simulate being in a previous month
+    provider._calls_this_month = 3000
+    provider._quota_month = (2020, 1)
+    # Calling _maybe_reset_monthly_quota should detect the month change and reset
+    provider._maybe_reset_monthly_quota()
+    assert provider._calls_this_month == 0
+
+
+def test_quota_does_not_reset_same_month():
+    provider = IndianAPIProvider("test-key")
+    provider._calls_this_month = 3000
+    # Keep the same month as now
+    now = datetime.now(timezone.utc)
+    provider._quota_month = (now.year, now.month)
+    provider._maybe_reset_monthly_quota()
+    assert provider._calls_this_month == 3000
+
+
+def test_quota_call_interval_respects_rate_limit():
+    # QUOTA_CALL_INTERVAL must always be >= MIN_CALL_INTERVAL (1 req/sec)
+    assert QUOTA_CALL_INTERVAL >= 1.0
+
+
+def test_quota_call_interval_within_monthly_budget():
+    # At QUOTA_CALL_INTERVAL seconds per call, monthly calls must stay under MONTHLY_QUOTA
+    from market.indian_api import SECONDS_PER_MONTH
+
+    calls_per_month = SECONDS_PER_MONTH / QUOTA_CALL_INTERVAL
+    assert calls_per_month <= MONTHLY_QUOTA
