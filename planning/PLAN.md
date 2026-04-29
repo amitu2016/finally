@@ -143,10 +143,20 @@ finally/
 # Required: OpenRouter API key for LLM chat functionality
 OPENROUTER_API_KEY=your-openrouter-api-key-here
 
+# Optional: Use Yahoo Finance as the market data source (free, no key, ~15 min delay).
+# Takes priority over INDIAN_STOCK_API_KEY when set to "true".
+USE_YAHOO=false
+
 # Optional: IndianAPI key (https://stock.indianapi.in) for real NSE/BSE market data.
+# Used only when USE_YAHOO is not "true".
 # If set → backend uses FallbackProvider (IndianAPI with automatic simulator fallback)
 # If absent → backend uses SimulatorProvider only (GBM-based mock)
 INDIAN_STOCK_API_KEY=your-indian-stock-api-key-here
+
+# Optional: Adjusts the IndianAPI poll interval to match actual daily runtime.
+# Default assumes 24/7; set to your actual hours/day to use quota more efficiently.
+# Example: DAILY_RUNTIME_HOURS=4 → interval drops from 576s to ~96s.
+DAILY_RUNTIME_HOURS=24
 
 # Optional: Set to "true" for deterministic mock LLM responses (testing)
 LLM_MOCK=false
@@ -154,18 +164,19 @@ LLM_MOCK=false
 
 ### Behavior
 
-- If `INDIAN_STOCK_API_KEY` is set → backend uses `FallbackProvider` (IndianAPIProvider as primary, SimulatorProvider as automatic warm standby)
-- If `INDIAN_STOCK_API_KEY` is absent → backend uses `SimulatorProvider` only
+- If `USE_YAHOO=true` → backend uses `YahooFinanceProvider` (free, no key, NSE `.NS` suffix, ~15 min delay, polls every 60s)
+- Else if `INDIAN_STOCK_API_KEY` is set → backend uses `FallbackProvider` (IndianAPIProvider as primary, SimulatorProvider as automatic warm standby)
+- Else → backend uses `SimulatorProvider` only (GBM-based mock)
 - If `LLM_MOCK=true` → backend returns deterministic mock LLM responses (for E2E tests)
 - The backend reads `.env` from the project root (mounted into the container or read via docker `--env-file`)
 
-> **Implementation note**: The original design used a `USE_REAL_MARKET_DATA` boolean flag to toggle market data sources. The implemented factory (`backend/market/factory.py`) instead uses the presence of `INDIAN_STOCK_API_KEY` directly as the selector — simpler and avoids inconsistency between the flag and the key.
+> **Implementation note**: The original design used a `USE_REAL_MARKET_DATA` boolean flag to toggle market data sources. The implemented factory (`backend/market/factory.py`) instead uses the presence of `INDIAN_STOCK_API_KEY` directly as the selector — simpler and avoids inconsistency between the flag and the key. `USE_YAHOO` was added later as a higher-priority override.
 
 ---
 
 ## 6. Market Data
 
-### Three Implementations, One Interface (IMPLEMENTED)
+### Four Implementations, One Interface (IMPLEMENTED)
 
 All market data providers implement the `MarketDataProvider` abstract base class defined in `backend/market/base.py`. The interface exposes:
 
@@ -224,13 +235,27 @@ Located in `backend/market/fallback.py`. This provider was added beyond the orig
 - Fallback is **permanent** for the lifetime of the instance; restart to re-attempt the real API
 - `set_tickers()` propagates to both underlying providers simultaneously
 
+### Yahoo Finance — `YahooFinanceProvider` (IMPLEMENTED)
+
+Located in `backend/market/yahoo.py`.
+
+- Uses the `yfinance` library (unofficial Yahoo Finance API) — **no API key required**
+- NSE tickers mapped to Yahoo symbols via `.NS` suffix (e.g. `RELIANCE` → `RELIANCE.NS`)
+- Polls all tracked tickers sequentially every 60 seconds via a thread-pool executor
+- Data is typically delayed ~15 minutes (Yahoo Finance free tier)
+- `fast_info.last_price` / `fast_info.previous_close` used for current and previous prices
+- `change_pct` computed as `(last_price - previous_close) / previous_close × 100`
+- Handles `None` / `NaN` prices and network errors gracefully — retains last cached price
+- Rolling 200-price history buffer per ticker
+
 ### Provider Selection — `create_market_provider()` (IMPLEMENTED)
 
 Located in `backend/market/factory.py`.
 
 ```python
-INDIAN_STOCK_API_KEY set → FallbackProvider(api_key)   # IndianAPI + auto-fallback to simulator
-INDIAN_STOCK_API_KEY absent → SimulatorProvider()        # GBM simulation only
+USE_YAHOO=true              → YahooFinanceProvider()     # free, no key, ~15 min delay
+INDIAN_STOCK_API_KEY set    → FallbackProvider(api_key)  # IndianAPI + auto-fallback to simulator
+Neither                     → SimulatorProvider()         # GBM simulation only
 ```
 
 ### Shared Price Cache
@@ -502,7 +527,7 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 ### Unit Tests (within `frontend/` and `backend/`)
 
 **Backend (pytest)**:
-- Market data: simulator generates valid prices, GBM math is correct, Indian Stock Market API response parsing works, both implementations conform to the abstract interface
+- Market data: simulator generates valid prices, GBM math is correct, Indian Stock Market API response parsing works, Yahoo Finance ticker mapping and fetch logic works, all implementations conform to the abstract interface
 - Portfolio: trade execution logic, P&L calculations, edge cases (selling more than owned, buying with insufficient cash, selling at a loss)
 - LLM: structured output parsing handles all valid schemas, graceful handling of malformed responses, trade validation within chat flow
 - API routes: correct status codes, response shapes, error handling
@@ -535,7 +560,7 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 
 This section tracks what has been built versus what remains planned.
 
-### ✅ Implemented (Market Data Layer — PRs #10–13)
+### ✅ Implemented (Market Data Layer — PRs #10–13, #17)
 
 | Component | File | Status |
 |---|---|---|
@@ -544,12 +569,15 @@ This section tracks what has been built versus what remains planned.
 | GBM simulator | `backend/market/simulator.py` | ✅ Done |
 | IndianAPI client | `backend/market/indian_api.py` | ✅ Done |
 | Fallback provider | `backend/market/fallback.py` | ✅ Done |
+| Yahoo Finance provider | `backend/market/yahoo.py` | ✅ Done |
 | Provider factory | `backend/market/factory.py` | ✅ Done |
 | Market interface tests | `backend/tests/test_market_interface.py` | ✅ Done |
 | Simulator tests | `backend/tests/test_simulator.py` | ✅ Done |
 | IndianAPI tests | `backend/tests/test_indian_api.py` | ✅ Done |
 | Fallback tests | `backend/tests/test_fallback.py` | ✅ Done |
+| Yahoo Finance tests | `backend/tests/test_yahoo.py` | ✅ Done |
 | Factory tests | `backend/tests/test_factory.py` | ✅ Done |
+| CLI demo | `backend/demo.py` | ✅ Done |
 | Planning docs | `planning/MARKET_DATA_DESIGN.md`, `MARKET_INTERFACE.md`, `MARKET_SIMULATOR.md`, `INDIAN_API.md` | ✅ Done |
 
 ### ❌ Not Yet Implemented

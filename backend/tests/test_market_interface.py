@@ -1,10 +1,11 @@
-"""Verify both providers satisfy the MarketDataProvider contract."""
+"""Verify all providers satisfy the MarketDataProvider contract."""
 import pytest
 
 from market.base import MarketDataProvider
 from market.indian_api import IndianAPIProvider
 from market.simulator import SimulatorProvider
 from market.types import StockPrice
+from market.yahoo import YahooFinanceProvider
 
 
 # ── isinstance checks ────────────────────────────────────────────────────────
@@ -18,14 +19,20 @@ def test_indian_api_is_market_data_provider():
     assert isinstance(IndianAPIProvider("fake-key"), MarketDataProvider)
 
 
+def test_yahoo_is_market_data_provider():
+    assert isinstance(YahooFinanceProvider(), MarketDataProvider)
+
+
 # ── Parametrized contract tests ──────────────────────────────────────────────
 
 
-@pytest.fixture(params=["simulator", "indian_api"])
+@pytest.fixture(params=["simulator", "indian_api", "yahoo"])
 def provider(request) -> MarketDataProvider:
     if request.param == "simulator":
         return SimulatorProvider()
-    return IndianAPIProvider("fake-key")
+    if request.param == "indian_api":
+        return IndianAPIProvider("fake-key")
+    return YahooFinanceProvider()
 
 
 def test_get_price_returns_none_before_set_tickers(provider):

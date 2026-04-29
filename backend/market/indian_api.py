@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import random
 from datetime import datetime, timezone
 
@@ -20,15 +21,26 @@ MONTHLY_QUOTA = 5000        # maximum API calls per calendar month
 QUOTA_SAFETY_FACTOR = 0.9   # use only 90 % of the quota to leave headroom
 MIN_CALL_INTERVAL = 1.0     # hard rate limit: at most 1 request per second
 
-SECONDS_PER_MONTH = 30 * 24 * 3600  # conservative 30-day month = 2,592,000 s
+# How many hours per day the app actually runs.
+# Set DAILY_RUNTIME_HOURS in .env to match your usage pattern so the
+# poll interval is calculated against real runtime rather than 24/7.
+# Examples: 4 → ~96s interval, 2 → ~48s interval (each ticker refreshes
+# every interval × number_of_tickers seconds).
+_daily_hours = float(os.getenv("DAILY_RUNTIME_HOURS", "24"))
+SECONDS_PER_MONTH = 30 * _daily_hours * 3600
 
 # Minimum wait between consecutive API calls to stay within monthly quota.
-# Formula: total_seconds / (monthly_budget × safety_factor)
-# = 2,592,000 / (5,000 × 0.9) ≈ 576 s
-# The max() ensures we never violate the 1-req/sec hard rate limit either.
+# Formula: runtime_seconds_per_month / (monthly_budget × safety_factor)
 QUOTA_CALL_INTERVAL: float = max(
     MIN_CALL_INTERVAL,
     SECONDS_PER_MONTH / (MONTHLY_QUOTA * QUOTA_SAFETY_FACTOR),
+)
+
+logger.info(
+    "IndianAPI poll interval: %.0fs (DAILY_RUNTIME_HOURS=%.1f, monthly budget=%d calls)",
+    QUOTA_CALL_INTERVAL,
+    _daily_hours,
+    int(MONTHLY_QUOTA * QUOTA_SAFETY_FACTOR),
 )
 
 POLL_JITTER = 10.0          # random jitter added to each sleep (seconds)

@@ -9,6 +9,7 @@ dependencies = [
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
     "litellm>=1.40.0",
+    "yfinance>=0.2.50",
 ]
 
 [project.optional-dependencies]
@@ -22,6 +23,9 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["market"]
 
 [build-system]
 requires = ["hatchling"]
