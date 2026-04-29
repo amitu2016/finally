@@ -294,3 +294,147 @@ async def test_stop_is_idempotent():
     await provider.start()
     await provider.stop()
     await provider.stop()  # Should not raise
+
+
+# ── _parse_response: defensive numeric parsing ──────────────────────────────
+
+
+def test_parse_returns_none_on_string_price():
+    data = {**SAMPLE_RESPONSE, "currentPrice": {"NSE": "not-a-number"}}
+    sp = _parse_response("RELIANCE", data, prev=None)
+    assert sp is None
+
+
+def test_parse_returns_none_on_dict_price():
+    data = {**SAMPLE_RESPONSE, "currentPrice": {"NSE": {"nested": "object"}}}
+    sp = _parse_response("RELIANCE", data, prev=None)
+    assert sp is None
+
+
+def test_parse_accepts_string_encoded_number():
+    data = {**SAMPLE_RESPONSE, "currentPrice": {"NSE": "2195.75"}}
+    sp = _parse_response("RELIANCE", data, prev=None)
+    assert sp is not None
+    assert sp.price == 2195.75
+
+
+# ── IndianAPIProvider: set_tickers prunes stale state ───────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_set_tickers_prunes_stale_cache():
+    respx.get(f"{BASE_URL}/stock").mock(
+        return_value=httpx.Response(200, json=SAMPLE_RESPONSE)
+    )
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE", "TCS"])
+    async with httpx.AsyncClient() as client:
+        await provider._poll_all(client)
+
+    assert provider.get_price("RELIANCE") is not None
+
+    provider.set_tickers(["TCS"])
+    assert provider.get_price("RELIANCE") is None
+    assert "RELIANCE" not in provider._cache
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_set_tickers_prunes_stale_history():
+    respx.get(f"{BASE_URL}/stock").mock(
+        return_value=httpx.Response(200, json=SAMPLE_RESPONSE)
+    )
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    async with httpx.AsyncClient() as client:
+        await provider._poll_all(client)
+        await provider._poll_all(client)
+
+    assert len(provider.get_history("RELIANCE")) > 0
+
+    provider.set_tickers([])
+    assert provider.get_history("RELIANCE") == []
+    assert "RELIANCE" not in provider._history
+
+
+def test_set_tickers_keeps_retained_cache():
+    provider = IndianAPIProvider("test-key")
+    provider._cache["TCS"] = StockPrice("TCS", 3440.0, 3430.0, 0.3, datetime.now(timezone.utc))
+    provider.set_tickers(["TCS", "RELIANCE"])
+    provider.set_tickers(["TCS"])
+    assert provider.get_price("TCS") is not None
+
+
+# ── IndianAPIProvider: double-start guard ────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_double_start_does_not_create_duplicate_task():
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers([])
+
+    await provider.start()
+    task_first = provider._task
+
+    await provider.start()
+    assert provider._task is task_first
+
+    await provider.stop()
+
+
+@pytest.mark.asyncio
+async def test_task_is_none_after_stop():
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers([])
+    await provider.start()
+    await provider.stop()
+    assert provider._task is None
+
+
+@pytest.mark.asyncio
+async def test_restart_after_stop_creates_new_task():
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers([])
+
+    await provider.start()
+    await provider.stop()
+    assert provider._task is None
+
+    await provider.start()
+    assert provider._task is not None
+    assert not provider._task.done()
+
+    await provider.stop()
+
+
+# ── IndianAPIProvider: _poll_all success count ───────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_all_returns_success_count():
+    respx.get(f"{BASE_URL}/stock", params={"name": "RELIANCE"}).mock(
+        return_value=httpx.Response(200, json=SAMPLE_RESPONSE)
+    )
+    respx.get(f"{BASE_URL}/stock", params={"name": "TCS"}).mock(
+        return_value=httpx.Response(500)
+    )
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE", "TCS"])
+    async with httpx.AsyncClient() as client:
+        count = await provider._poll_all(client)
+
+    assert count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_poll_all_returns_zero_on_all_failures():
+    respx.get(f"{BASE_URL}/stock").mock(return_value=httpx.Response(503))
+    provider = IndianAPIProvider("test-key")
+    provider.set_tickers(["RELIANCE"])
+    async with httpx.AsyncClient() as client:
+        count = await provider._poll_all(client)
+
+    assert count == 0
