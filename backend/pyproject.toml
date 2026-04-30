@@ -10,6 +10,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "litellm>=1.40.0",
     "yfinance>=0.2.50",
+    "aiosqlite>=0.22.1",
+    "sse-starlette>=3.4.1",
 ]
 
 [project.optional-dependencies]
@@ -25,8 +27,16 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["market"]
+packages = ["market", "db", "app"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"db/schema.sql" = "db/schema.sql"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]

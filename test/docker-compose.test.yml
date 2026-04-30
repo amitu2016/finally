@@ -1,0 +1,21 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      - LLM_MOCK=true
+      - OPENROUTER_API_KEY=mock-key
+    volumes:
+      - ./db-test:/app/db
+
+  tester:
+    image: mcr.microsoft.com/playwright:v1.49.0-noble
+    depends_on:
+      - app
+    environment:
+      - BASE_URL=http://app:8000
+    volumes:
+      - .:/test
+    working_dir: /test
+    command: npx playwright test
