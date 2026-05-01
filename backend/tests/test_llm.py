@@ -109,7 +109,7 @@ async def app_client(tmp_path: Path) -> Iterator[tuple[TestClient, FakeProvider]
 
 async def test_mock_mode_returns_deterministic_response(monkeypatch, mocker):
     monkeypatch.setenv("LLM_MOCK", "true")
-    spy = mocker.patch("app.llm.completion")
+    spy = mocker.patch("app.llm.acompletion")
 
     result = await llm.call_llm([{"role": "user", "content": "hi"}], "ctx")
 
@@ -124,7 +124,7 @@ async def test_real_mode_invokes_completion(monkeypatch, mocker):
     monkeypatch.setenv("LLM_MOCK", "false")
     payload = ChatResponse(message="Hello!", trades=[], watchlist_changes=[])
     mock_completion = mocker.patch(
-        "app.llm.completion", return_value=_make_completion_response(payload)
+        "app.llm.acompletion", return_value=_make_completion_response(payload)
     )
 
     result = await llm.call_llm(
@@ -178,7 +178,7 @@ async def test_chat_executes_buy_trade(app_client, monkeypatch, mocker):
         watchlist_changes=[],
     )
     mocker.patch(
-        "app.llm.completion", return_value=_make_completion_response(payload)
+        "app.llm.acompletion", return_value=_make_completion_response(payload)
     )
 
     r = client.post("/api/chat", json={"message": "buy 5 reliance"})
@@ -206,7 +206,7 @@ async def test_chat_insufficient_cash_reports_error(app_client, monkeypatch, moc
         watchlist_changes=[],
     )
     mocker.patch(
-        "app.llm.completion", return_value=_make_completion_response(payload)
+        "app.llm.acompletion", return_value=_make_completion_response(payload)
     )
 
     r = client.post("/api/chat", json={"message": "buy a ton"})
@@ -235,7 +235,7 @@ async def test_chat_applies_watchlist_changes(app_client, monkeypatch, mocker):
         ],
     )
     mocker.patch(
-        "app.llm.completion", return_value=_make_completion_response(payload)
+        "app.llm.acompletion", return_value=_make_completion_response(payload)
     )
 
     r = client.post("/api/chat", json={"message": "swap watchlist"})
@@ -254,7 +254,7 @@ async def test_chat_persists_history(app_client, monkeypatch, mocker):
     monkeypatch.setenv("LLM_MOCK", "false")
     payload = ChatResponse(message="Noted.", trades=[], watchlist_changes=[])
     mocker.patch(
-        "app.llm.completion", return_value=_make_completion_response(payload)
+        "app.llm.acompletion", return_value=_make_completion_response(payload)
     )
 
     client.post("/api/chat", json={"message": "hello there"})
@@ -273,7 +273,7 @@ async def test_chat_persists_history(app_client, monkeypatch, mocker):
 async def test_chat_llm_failure_returns_fallback(app_client, monkeypatch, mocker):
     client, _ = app_client
     monkeypatch.setenv("LLM_MOCK", "false")
-    mocker.patch("app.llm.completion", side_effect=RuntimeError("boom"))
+    mocker.patch("app.llm.acompletion", side_effect=RuntimeError("boom"))
 
     r = client.post("/api/chat", json={"message": "anything"})
     assert r.status_code == 200
@@ -285,7 +285,7 @@ async def test_chat_llm_failure_returns_fallback(app_client, monkeypatch, mocker
 async def test_chat_mock_mode_via_endpoint(app_client, monkeypatch, mocker):
     client, _ = app_client
     monkeypatch.setenv("LLM_MOCK", "true")
-    spy = mocker.patch("app.llm.completion")
+    spy = mocker.patch("app.llm.acompletion")
 
     r = client.post("/api/chat", json={"message": "hi"})
     assert r.status_code == 200

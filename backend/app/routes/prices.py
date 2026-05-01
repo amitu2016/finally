@@ -48,7 +48,7 @@ async def stream_prices(
         while True:
             if await request.is_disconnected():
                 break
-            now = asyncio.get_event_loop().time()
+            now = asyncio.get_running_loop().time()
             if now - last_refresh >= WATCHLIST_REFRESH:
                 async with get_db(db_path) as conn:
                     tickers = set(await queries.get_watchlist(conn, user_id))

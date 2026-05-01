@@ -41,7 +41,7 @@ export function useWatchlist(): WatchlistState {
       const updated = await api.addWatchlist(cleaned);
       setEntries(updated);
     },
-    [],
+    [setEntries],
   );
 
   const removeTicker = useCallback(async (ticker: string) => {

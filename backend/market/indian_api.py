@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import random
 from datetime import datetime, timezone
 
 import httpx
@@ -16,10 +18,27 @@ BASE_URL = "https://stock.indianapi.in"
 # --------------------------------------------------------------------------- #
 
 MONTHLY_QUOTA = 5000        # maximum API calls per calendar month
+SAFETY_FACTOR = 0.9         # use 90% of quota to leave headroom
+EFFECTIVE_QUOTA = int(MONTHLY_QUOTA * SAFETY_FACTOR)  # 4500 calls/month
 
-FAST_POLL_INTERVAL = 1.0    # seconds between full-watchlist refresh cycles
 REQUEST_TIMEOUT = 10.0      # HTTP request timeout (seconds)
 HISTORY_LIMIT = 200         # rolling price history buffer per ticker
+JITTER = 10.0               # ±seconds of random jitter per sleep
+
+
+def _compute_call_interval() -> float:
+    """Seconds between consecutive API calls to stay within the monthly quota.
+
+    Reads DAILY_RUNTIME_HOURS to adjust for servers that don't run 24/7.
+    Default assumes continuous operation (24 h/day × 30 days/month).
+    """
+    daily_hours = float(os.getenv("DAILY_RUNTIME_HOURS", "24"))
+    monthly_runtime_seconds = daily_hours * 3600 * 30
+    return monthly_runtime_seconds / EFFECTIVE_QUOTA
+
+
+# Recalculated at module load time; DAILY_RUNTIME_HOURS must be set before import.
+QUOTA_CALL_INTERVAL: float = _compute_call_interval()
 
 
 def _parse_response(ticker: str, data: dict, prev: StockPrice | None) -> StockPrice | None:
@@ -140,22 +159,39 @@ class IndianAPIProvider(MarketDataProvider):
     # ---------------------------------------------------------------------- #
 
     async def _poll_loop(self) -> None:
-        """Fetch all tracked tickers concurrently every FAST_POLL_INTERVAL seconds."""
+        """Round-robin single-ticker polling to stay within the monthly quota.
+
+        Polls one ticker per QUOTA_CALL_INTERVAL seconds (±jitter), cycling
+        through all tracked tickers sequentially. With 10 tickers and the
+        default 576 s interval, each ticker refreshes roughly every 96 minutes
+        — comfortably within the 5,000 call/month budget.
+        """
         async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
+            idx = 0
             while True:
-                if self._tickers:
-                    self._maybe_reset_monthly_quota()
-                    if self._calls_this_month >= MONTHLY_QUOTA:
-                        self._is_rate_limited = True
-                        logger.warning(
-                            "Monthly quota of %d calls exhausted. Pausing for 1h.",
-                            MONTHLY_QUOTA,
-                        )
-                        await asyncio.sleep(3600)
-                        continue
-                    if not self._is_rate_limited:
-                        await self._poll_all(client)
-                await asyncio.sleep(FAST_POLL_INTERVAL)
+                self._maybe_reset_monthly_quota()
+
+                if self._calls_this_month >= MONTHLY_QUOTA:
+                    self._is_rate_limited = True
+                    logger.warning(
+                        "Monthly quota of %d calls exhausted. Pausing for 1h.",
+                        MONTHLY_QUOTA,
+                    )
+                    await asyncio.sleep(3600)
+                    continue
+
+                if self._is_rate_limited:
+                    await asyncio.sleep(QUOTA_CALL_INTERVAL)
+                    continue
+
+                tickers = self._tickers
+                if tickers:
+                    ticker = tickers[idx % len(tickers)]
+                    idx += 1
+                    await self._poll_one(client, ticker)
+
+                jitter = random.uniform(-JITTER, JITTER)
+                await asyncio.sleep(max(10.0, QUOTA_CALL_INTERVAL + jitter))
 
     async def _poll_one(self, client: httpx.AsyncClient, ticker: str) -> bool:
         """Fetch and cache the latest price for a single ticker.
@@ -194,10 +230,3 @@ class IndianAPIProvider(MarketDataProvider):
         if len(buf) > HISTORY_LIMIT:
             self._history[ticker] = buf[-HISTORY_LIMIT:]
         return True
-
-    async def _poll_all(self, client: httpx.AsyncClient) -> int:
-        """Fetch all tickers concurrently. Returns the number successfully updated."""
-        results = await asyncio.gather(
-            *[self._poll_one(client, t) for t in self._tickers]
-        )
-        return sum(results)

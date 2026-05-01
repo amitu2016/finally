@@ -134,7 +134,8 @@ async def test_watchlist_add_and_remove(app_client):
 
     r = client.post("/api/watchlist", json={"ticker": "BAJFINANCE"})
     assert r.status_code == 201
-    assert r.json()["ticker"] == "BAJFINANCE"
+    entries = r.json()
+    assert any(e["ticker"] == "BAJFINANCE" for e in entries)
     assert "BAJFINANCE" in provider.tickers
 
     r2 = client.post("/api/watchlist", json={"ticker": "BAJFINANCE"})

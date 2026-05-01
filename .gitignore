@@ -213,3 +213,8 @@ out/
 .npm-cache/
 *.tsbuildinfo
 next-env.d.ts
+
+# Un-ignore frontend/lib/ — the root lib/ rule above (Python packaging) would otherwise
+# block committing the Next.js utility modules in frontend/lib/.
+!frontend/lib/
+!frontend/lib/**
