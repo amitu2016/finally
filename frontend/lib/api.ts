@@ -1,6 +1,7 @@
 import type {
   Portfolio,
   PortfolioSnapshot,
+  PriceTick,
   TradeRequest,
   WatchlistEntry,
   WatchlistChange,
@@ -109,6 +110,10 @@ export const api = {
     return request<WatchlistEntry[]>(`/api/watchlist/${encodeURIComponent(ticker)}`, {
       method: "DELETE",
     });
+  },
+
+  priceHistory(ticker: string): Promise<PriceTick[]> {
+    return request<PriceTick[]>(`/api/prices/${encodeURIComponent(ticker)}/history`);
   },
 
   async chat(message: string): Promise<ChatResponse> {
