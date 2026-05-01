@@ -503,8 +503,8 @@ The `db/` directory in the project root maps to `/app/db` in the container. The 
 ### Start/Stop Scripts
 
 **`scripts/start_mac.sh`** (macOS/Linux):
-- Builds the Docker image if not already built (or if `--build` flag passed)
-- Runs the container with the volume mount, port mapping, and `.env` file
+- Builds the Docker image if not already built (or if --build flag passed)
+- Runs the container with the volume mount, port mapping, and .env file
 - Prints the URL to access the app
 - Optionally opens the browser
 
@@ -560,7 +560,7 @@ The container is designed to deploy to AWS App Runner, Render, or any container 
 
 This section tracks what has been built versus what remains planned.
 
-### ✅ Implemented (Market Data Layer — PRs #10–13, #17)
+### ✅ Implemented (Market Data Layer)
 
 | Component | File | Status |
 |---|---|---|
@@ -580,22 +580,21 @@ This section tracks what has been built versus what remains planned.
 | CLI demo | `backend/demo.py` | ✅ Done |
 | Planning docs | `planning/MARKET_DATA_DESIGN.md`, `MARKET_INTERFACE.md`, `MARKET_SIMULATOR.md`, `INDIAN_API.md` | ✅ Done |
 
-### ❌ Not Yet Implemented
+### ✅ Implemented (Application & Infrastructure)
 
-| Component | Notes |
-|---|---|
-| FastAPI application | `backend/app/main.py` — lifespan, routes, SSE |
-| REST API endpoints | All `/api/*` routes |
-| SQLite database layer | Schema creation, seed data, ORM queries |
-| LLM chat integration | LiteLLM → OpenRouter → Cerebras, structured output |
-| Portfolio management | Trade execution, positions, cash balance |
-| Watchlist CRUD | DB-backed add/remove with SSE integration |
-| Portfolio snapshots | Background task + `/api/portfolio/history` |
-| Frontend | Next.js project, all React components |
-| Dockerfile | Multi-stage build (Node → Python) |
-| Start/stop scripts | `scripts/start_mac.sh`, `start_windows.ps1`, etc. |
-| E2E tests | Playwright test suite in `test/` |
+| Component | File / Directory | Status |
+|---|---|---|
+| FastAPI application | `backend/app/main.py` | ✅ Done |
+| REST API endpoints | `backend/app/routes/` | ✅ Done |
+| SQLite database layer | `backend/db/` | ✅ Done |
+| LLM chat integration | `backend/app/llm.py` | ✅ Done |
+| Portfolio management | `backend/app/portfolio.py` | ✅ Done |
+| Watchlist CRUD | `backend/app/routes/watchlist.py` | ✅ Done |
+| Portfolio snapshots | `backend/app/main.py` | ✅ Done |
+| Frontend | `frontend/` | ✅ Done |
+| Dockerfile | `Dockerfile` | ✅ Done |
+| Start/stop scripts | `scripts/` | ✅ Done |
+| E2E tests | `test/` | ✅ Done |
+| Environment setup | `.env.example` | ✅ Done |
 
 ---
-
-
