@@ -1,6 +1,13 @@
 -- FinAlly database schema (SQLite)
 -- All tables include user_id (default "default") to enable future multi-user support.
 
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS users_profile (
     id TEXT PRIMARY KEY,
     cash_balance REAL NOT NULL DEFAULT 100000.0,

@@ -6,7 +6,6 @@ import asyncio
 import json
 from typing import AsyncIterator
 
-import aiosqlite
 from fastapi import APIRouter, Depends, Request
 from sse_starlette.sse import EventSourceResponse
 
@@ -15,7 +14,7 @@ from db.database import get_db
 from market.base import MarketDataProvider
 from market.types import StockPrice
 
-from ..dependencies import get_db_conn, get_market
+from ..dependencies import get_current_user, get_current_user_sse, get_market
 
 router = APIRouter()
 
@@ -34,8 +33,11 @@ def _serialize(p: StockPrice) -> dict:
 
 
 @router.get("/api/stream/prices")
-async def stream_prices(request: Request) -> EventSourceResponse:
-    """SSE stream of latest prices for tickers in the watchlist."""
+async def stream_prices(
+    request: Request,
+    user_id: str = Depends(get_current_user_sse),
+) -> EventSourceResponse:
+    """SSE stream of latest prices for the authenticated user's watchlist."""
     db_path = request.app.state.db_path
     provider: MarketDataProvider = request.app.state.market
 
@@ -44,7 +46,7 @@ async def stream_prices(request: Request) -> EventSourceResponse:
             if await request.is_disconnected():
                 break
             async with get_db(db_path) as conn:
-                tickers = set(await queries.get_watchlist(conn))
+                tickers = set(await queries.get_watchlist(conn, user_id))
             prices = provider.get_all_prices()
             for ticker in tickers:
                 p = prices.get(ticker)
@@ -60,6 +62,7 @@ async def stream_prices(request: Request) -> EventSourceResponse:
 async def price_history(
     ticker: str,
     provider: MarketDataProvider = Depends(get_market),
+    user_id: str = Depends(get_current_user),
 ) -> list[dict]:
     """Return the rolling in-memory price history for a ticker."""
     history = provider.get_history(ticker.upper(), 200)

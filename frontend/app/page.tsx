@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { AuthGate } from "@/components/AuthGate";
 import { ChatPanel } from "@/components/ChatPanel";
 import { Header } from "@/components/Header";
 import { MainChart } from "@/components/MainChart";
@@ -12,8 +13,9 @@ import { WatchlistPanel } from "@/components/WatchlistPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useWatchlist } from "@/hooks/useWatchlist";
+import type { AuthUser } from "@/lib/auth";
 
-export default function Page() {
+function TradingApp({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const market = useMarketData();
   const portfolio = usePortfolio();
   const watchlist = useWatchlist();
@@ -26,20 +28,14 @@ export default function Page() {
     }
   }, [selected, watchlist.entries]);
 
-  const handleAddTicker = useCallback(
-    async (ticker: string) => {
-      await watchlist.addTicker(ticker);
-    },
-    [watchlist],
-  );
+  const handleAddTicker = useCallback(async (ticker: string) => {
+    await watchlist.addTicker(ticker);
+  }, [watchlist]);
 
-  const handleRemoveTicker = useCallback(
-    async (ticker: string) => {
-      await watchlist.removeTicker(ticker);
-      if (selected === ticker) setSelected(null);
-    },
-    [watchlist, selected],
-  );
+  const handleRemoveTicker = useCallback(async (ticker: string) => {
+    await watchlist.removeTicker(ticker);
+    if (selected === ticker) setSelected(null);
+  }, [watchlist, selected]);
 
   const handleAfterAIAction = useCallback(() => {
     void watchlist.refresh();
@@ -52,9 +48,11 @@ export default function Page() {
         totalValue={portfolio.portfolio?.total_value ?? null}
         cashBalance={portfolio.portfolio?.cash_balance ?? null}
         status={market.status}
+        username={user.username}
+        onLogout={onLogout}
       />
       <div className="flex min-h-0 flex-1">
-        <div className="w-72 min-w-[260px]">
+        <div className="w-96 min-w-[320px]">
           <WatchlistPanel
             entries={watchlist.entries}
             prices={market.prices}
@@ -67,33 +65,27 @@ export default function Page() {
         </div>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-0 flex-1">
-            <MainChart
-              ticker={selected}
-              liveTick={selected ? market.prices[selected] : undefined}
-            />
+            <MainChart ticker={selected} liveTick={selected ? market.prices[selected] : undefined} />
           </div>
           <div className="grid h-72 grid-cols-2 border-t border-[#30363d]">
             <PortfolioHeatmap positions={portfolio.portfolio?.positions ?? []} />
             <PnLChart history={portfolio.history} />
           </div>
           <div className="h-56">
-            <PositionsTable
-              positions={portfolio.portfolio?.positions ?? []}
-              prices={market.prices}
-              onSelect={setSelected}
-            />
+            <PositionsTable positions={portfolio.portfolio?.positions ?? []} prices={market.prices} onSelect={setSelected} />
           </div>
-          <TradeBar
-            initialTicker={selected}
-            onTrade={(req) => portfolio.executeTrade(req)}
-          />
+          <TradeBar initialTicker={selected} onTrade={(req) => portfolio.executeTrade(req)} />
         </div>
-        <ChatPanel
-          open={chatOpen}
-          onToggle={() => setChatOpen((o) => !o)}
-          onActions={handleAfterAIAction}
-        />
+        <ChatPanel open={chatOpen} onToggle={() => setChatOpen((o) => !o)} onActions={handleAfterAIAction} />
       </div>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <AuthGate>
+      {(user, onLogout) => <TradingApp user={user} onLogout={onLogout} />}
+    </AuthGate>
   );
 }

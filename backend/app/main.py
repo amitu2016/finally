@@ -16,7 +16,8 @@ from db import queries
 from db.database import get_db, init_db
 from market.factory import create_market_provider
 
-from .portfolio import DEFAULT_USER, compute_total_value
+from .portfolio import compute_total_value
+from .routes.auth import router as auth_router
 from .routes.chat import router as chat_router
 from .routes.health import router as health_router
 from .routes.portfolio import router as portfolio_router
@@ -33,13 +34,15 @@ SNAPSHOT_INTERVAL = 30  # seconds
 
 
 async def _snapshot_loop(app: FastAPI) -> None:
-    """Record a portfolio value snapshot every SNAPSHOT_INTERVAL seconds."""
+    """Record a portfolio value snapshot every SNAPSHOT_INTERVAL seconds for all users."""
     while True:
         try:
             await asyncio.sleep(SNAPSHOT_INTERVAL)
             async with get_db(app.state.db_path) as db:
-                total = await compute_total_value(db, app.state.market)
-                await queries.record_snapshot(db, DEFAULT_USER, total)
+                user_ids = await queries.get_all_user_ids(db)
+                for user_id in user_ids:
+                    total = await compute_total_value(db, app.state.market, user_id)
+                    await queries.record_snapshot(db, user_id, total)
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -48,12 +51,11 @@ async def _snapshot_loop(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Support Docker volume at /app/data, fallback to local db/ directory
     if Path("/app/data").exists():
         db_path = "/app/data/finally.db"
     else:
         db_path = str(PROJECT_ROOT / "db" / "finally.db")
-    
+
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     app.state.db_path = db_path
 
@@ -63,8 +65,8 @@ async def lifespan(app: FastAPI):
     app.state.market = provider
 
     async with get_db(db_path) as db:
-        tickers = await queries.get_watchlist(db)
-    provider.set_tickers(tickers)
+        all_tickers = await queries.get_all_watchlist_tickers(db)
+    provider.set_tickers(all_tickers)
     await provider.start()
 
     snapshot_task = asyncio.create_task(_snapshot_loop(app))
@@ -83,6 +85,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="FinAlly", lifespan=lifespan)
 
+app.include_router(auth_router)
 app.include_router(health_router)
 app.include_router(prices_router)
 app.include_router(portfolio_router)
@@ -90,8 +93,6 @@ app.include_router(watchlist_router)
 app.include_router(chat_router)
 
 
-# Static frontend (Next.js export). Only mounted if the directory exists,
-# so dev runs without a built frontend still work.
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 if STATIC_DIR.exists():
     app.mount("/_next", StaticFiles(directory=STATIC_DIR / "_next"), name="next-assets")

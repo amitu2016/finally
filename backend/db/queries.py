@@ -24,6 +24,70 @@ def _row_to_dict(row: aiosqlite.Row | None) -> dict[str, Any] | None:
     return dict(row) if row is not None else None
 
 
+DEFAULT_WATCHLIST = (
+    "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+    "BHARTIARTL", "SBIN", "ITC", "LT", "HINDUNILVR",
+)
+
+# ── auth ─────────────────────────────────────────────────────────────────────
+
+
+async def create_user(
+    db: aiosqlite.Connection, username: str, password_hash: str
+) -> dict[str, Any]:
+    """Create a user account with a fresh ₹1,00,000 portfolio and default watchlist."""
+    user_id = _uuid()
+    now = _now()
+    await db.execute(
+        "INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)",
+        (user_id, username, password_hash, now),
+    )
+    await db.execute(
+        "INSERT INTO users_profile (id, cash_balance, created_at) VALUES (?, ?, ?)",
+        (user_id, 100000.0, now),
+    )
+    await db.executemany(
+        "INSERT INTO watchlist (user_id, ticker, added_at) VALUES (?, ?, ?)",
+        [(user_id, ticker, now) for ticker in DEFAULT_WATCHLIST],
+    )
+    await db.commit()
+    return {"id": user_id, "username": username, "created_at": now}
+
+
+async def get_user_by_username(
+    db: aiosqlite.Connection, username: str
+) -> dict[str, Any] | None:
+    cursor = await db.execute(
+        "SELECT id, username, password_hash, created_at FROM users WHERE username=?",
+        (username,),
+    )
+    return _row_to_dict(await cursor.fetchone())
+
+
+async def get_user_by_id(
+    db: aiosqlite.Connection, user_id: str
+) -> dict[str, Any] | None:
+    cursor = await db.execute(
+        "SELECT id, username, created_at FROM users WHERE id=?",
+        (user_id,),
+    )
+    return _row_to_dict(await cursor.fetchone())
+
+
+async def get_all_user_ids(db: aiosqlite.Connection) -> list[str]:
+    """Return all user_ids in users_profile (for snapshot loop)."""
+    cursor = await db.execute("SELECT id FROM users_profile")
+    rows = await cursor.fetchall()
+    return [r["id"] for r in rows]
+
+
+async def get_all_watchlist_tickers(db: aiosqlite.Connection) -> list[str]:
+    """Return distinct tickers across ALL users' watchlists (for market provider)."""
+    cursor = await db.execute("SELECT DISTINCT ticker FROM watchlist")
+    rows = await cursor.fetchall()
+    return [r["ticker"] for r in rows]
+
+
 # ── users / portfolio ────────────────────────────────────────────────────────
 
 

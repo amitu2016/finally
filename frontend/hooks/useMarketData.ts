@@ -20,7 +20,9 @@ export function useMarketData(): MarketDataState {
   const sourceRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
-    const es = new EventSource("/api/stream/prices");
+    const token = typeof window !== "undefined" ? localStorage.getItem("finally_token") : null;
+    const url = token ? `/api/stream/prices?token=${encodeURIComponent(token)}` : "/api/stream/prices";
+    const es = new EventSource(url);
     sourceRef.current = es;
     setStatus("connecting");
 

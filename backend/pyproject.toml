@@ -12,6 +12,8 @@ dependencies = [
     "yfinance>=0.2.50",
     "aiosqlite>=0.22.1",
     "sse-starlette>=3.4.1",
+    "python-jose[cryptography]>=3.5.0",
+    "passlib[bcrypt]>=1.7.4",
 ]
 
 [project.optional-dependencies]

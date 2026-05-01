@@ -11,13 +11,8 @@ from pydantic import BaseModel, Field
 from db import queries
 from market.base import MarketDataProvider
 
-from ..dependencies import get_db_conn, get_market
-from ..portfolio import (
-    DEFAULT_USER,
-    TradeError,
-    build_portfolio_snapshot,
-    execute_trade as _execute_trade,
-)
+from ..dependencies import get_current_user, get_db_conn, get_market
+from ..portfolio import TradeError, build_portfolio_snapshot, execute_trade as _execute_trade
 
 router = APIRouter()
 
@@ -32,9 +27,9 @@ class TradeRequest(BaseModel):
 async def get_portfolio(
     db: aiosqlite.Connection = Depends(get_db_conn),
     provider: MarketDataProvider = Depends(get_market),
+    user_id: str = Depends(get_current_user),
 ) -> dict:
-    """Return current portfolio: cash, positions with P&L, total value."""
-    return await build_portfolio_snapshot(db, provider)
+    return await build_portfolio_snapshot(db, provider, user_id)
 
 
 @router.post("/api/portfolio/trade")
@@ -42,12 +37,10 @@ async def execute_trade(
     body: TradeRequest,
     db: aiosqlite.Connection = Depends(get_db_conn),
     provider: MarketDataProvider = Depends(get_market),
+    user_id: str = Depends(get_current_user),
 ) -> dict:
-    """Execute a market order at the current price."""
     try:
-        result = await _execute_trade(
-            db, provider, body.ticker, body.side, body.quantity
-        )
+        result = await _execute_trade(db, provider, body.ticker, body.side, body.quantity, user_id)
     except TradeError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     return result["snapshot"]
@@ -56,9 +49,9 @@ async def execute_trade(
 @router.get("/api/portfolio/history")
 async def get_portfolio_history(
     db: aiosqlite.Connection = Depends(get_db_conn),
+    user_id: str = Depends(get_current_user),
 ) -> list[dict]:
-    """Return portfolio value snapshots over time, oldest first."""
-    snapshots = await queries.get_snapshots(db, DEFAULT_USER)
+    snapshots = await queries.get_snapshots(db, user_id)
     return [
         {"total_value": s["total_value"], "recorded_at": s["recorded_at"]}
         for s in snapshots

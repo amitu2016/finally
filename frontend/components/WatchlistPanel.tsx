@@ -39,10 +39,10 @@ export function WatchlistPanel({
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-[#161b22] text-[10px] uppercase tracking-wider text-[#8b949e]">
             <tr>
-              <th className="px-3 py-2 text-left">Symbol</th>
-              <th className="px-3 py-2 text-right">Price</th>
-              <th className="px-3 py-2 text-right">Chg%</th>
-              <th className="px-3 py-2 text-right">Trend</th>
+              <th className="px-2 py-2 text-left">Symbol</th>
+              <th className="px-2 py-2 text-right">Price</th>
+              <th className="px-2 py-2 text-right">Chg%</th>
+              <th className="px-2 py-2 text-right">Trend</th>
               <th className="px-1 py-2"></th>
             </tr>
           </thead>
@@ -61,7 +61,7 @@ export function WatchlistPanel({
                     isSelected ? "bg-[#1f2632]" : ""
                   }`}
                 >
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-2">
                     <div className="font-mono font-semibold text-[#e6edf3]">
                       {entry.ticker}
                     </div>
@@ -71,13 +71,13 @@ export function WatchlistPanel({
                       </div>
                     )}
                   </td>
-                  <td className="px-3 py-2 text-right text-[#e6edf3]">
+                  <td className="px-2 py-2 text-right text-[#e6edf3]">
                     <PriceCell price={livePrice ?? null} />
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono ${pnlColor(change)}`}>
+                  <td className={`px-2 py-2 text-right font-mono ${pnlColor(change)}`}>
                     {formatPct(change)}
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-2">
                     <div className="flex justify-end">
                       <Sparkline
                         data={sparklines[entry.ticker] ?? []}
@@ -85,7 +85,7 @@ export function WatchlistPanel({
                       />
                     </div>
                   </td>
-                  <td className="px-1 py-2 text-right">
+                  <td className="px-2 py-2 text-right">
                     <button
                       type="button"
                       aria-label={`Remove ${entry.ticker}`}
@@ -93,9 +93,14 @@ export function WatchlistPanel({
                         e.stopPropagation();
                         void onRemove(entry.ticker);
                       }}
-                      className="rounded px-1 text-[#8b949e] hover:bg-[#30363d] hover:text-[#ef4444]"
+                      className="rounded p-1 text-[#ef4444] hover:bg-[#30363d]"
                     >
-                      ×
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      </svg>
                     </button>
                   </td>
                 </tr>
