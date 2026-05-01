@@ -46,48 +46,48 @@ export function TradeBar({ initialTicker, onTrade }: Props) {
   };
 
   return (
-    <section className="flex items-center gap-3 border-t border-[#30363d] bg-[#161b22] px-4 py-2">
-      <span className="text-[10px] uppercase tracking-widest text-[#8b949e]">Trade</span>
-      <input
-        value={ticker}
-        onChange={(e) => setTicker(e.target.value.toUpperCase())}
-        placeholder="TICKER"
-        className="w-28 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1 font-mono text-xs text-[#e6edf3] outline-none focus:border-[#209dd7]"
-      />
-      <input
-        type="number"
-        min="0"
-        step="any"
-        value={quantity}
-        onChange={(e) => setQuantity(e.target.value)}
-        placeholder="Qty"
-        className="w-24 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1 font-mono text-xs text-[#e6edf3] outline-none focus:border-[#209dd7]"
-      />
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void submit("buy")}
-        className="rounded bg-[#209dd7] px-4 py-1 text-xs font-semibold text-[#0d1117] disabled:opacity-40"
-      >
-        BUY
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => void submit("sell")}
-        className="rounded bg-[#ef4444] px-4 py-1 text-xs font-semibold text-[#0d1117] disabled:opacity-40"
-      >
-        SELL
-      </button>
+    <section className="border-t border-[#30363d] bg-[#161b22] px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-[#8b949e]">Trade</span>
+        <input
+          value={ticker}
+          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+          placeholder="TICKER"
+          className="min-w-[72px] flex-1 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5 font-mono text-xs text-[#e6edf3] outline-none focus:border-[#209dd7] sm:flex-none sm:w-28"
+        />
+        <input
+          type="number"
+          min="0"
+          step="any"
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+          placeholder="Qty"
+          className="w-20 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5 font-mono text-xs text-[#e6edf3] outline-none focus:border-[#209dd7]"
+        />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void submit("buy")}
+          className="flex-1 rounded bg-[#209dd7] px-3 py-1.5 text-xs font-semibold text-[#0d1117] disabled:opacity-40 sm:flex-none sm:px-4"
+        >
+          BUY
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void submit("sell")}
+          className="flex-1 rounded bg-[#ef4444] px-3 py-1.5 text-xs font-semibold text-[#0d1117] disabled:opacity-40 sm:flex-none sm:px-4"
+        >
+          SELL
+        </button>
+      </div>
       {feedback && (
-        <span
-          className={`text-[11px] ${
-            feedback.kind === "ok" ? "text-[#22c55e]" : "text-[#ef4444]"
-          }`}
+        <p
+          className={`mt-1 text-[11px] ${feedback.kind === "ok" ? "text-[#22c55e]" : "text-[#ef4444]"}`}
           role="status"
         >
           {feedback.text}
-        </span>
+        </p>
       )}
     </section>
   );

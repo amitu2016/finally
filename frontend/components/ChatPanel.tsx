@@ -80,7 +80,7 @@ export function ChatPanel({ open, onToggle, onActions }: Props) {
   }
 
   return (
-    <section className="flex h-full w-80 flex-col border-l border-[#30363d] bg-[#0d1117]">
+    <section className="flex h-full w-full flex-col border-l border-[#30363d] bg-[#0d1117] md:w-80">
       <div className="flex items-center justify-between border-b border-[#30363d] bg-[#161b22] px-3 py-2">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-[#ecad0a]">
           AI Copilot

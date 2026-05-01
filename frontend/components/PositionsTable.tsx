@@ -23,8 +23,8 @@ export function PositionsTable({ positions, prices, onSelect }: Props) {
             <tr>
               <th className="px-3 py-2 text-left">Ticker</th>
               <th className="px-3 py-2 text-right">Qty</th>
-              <th className="px-3 py-2 text-right">Avg Cost</th>
-              <th className="px-3 py-2 text-right">Current</th>
+              <th className="hidden sm:table-cell px-3 py-2 text-right">Avg Cost</th>
+              <th className="hidden sm:table-cell px-3 py-2 text-right">Current</th>
               <th className="px-3 py-2 text-right">Unrealized P&amp;L</th>
               <th className="px-3 py-2 text-right">% Change</th>
             </tr>
@@ -46,10 +46,10 @@ export function PositionsTable({ positions, prices, onSelect }: Props) {
                   <td className="px-3 py-2 text-right font-mono text-[#e6edf3]">
                     {formatNumber(p.quantity)}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-[#e6edf3]">
+                  <td className="hidden sm:table-cell px-3 py-2 text-right font-mono text-[#e6edf3]">
                     {formatINR(p.avg_cost)}
                   </td>
-                  <td className="px-3 py-2 text-right font-mono text-[#e6edf3]">
+                  <td className="hidden sm:table-cell px-3 py-2 text-right font-mono text-[#e6edf3]">
                     {formatINR(live)}
                   </td>
                   <td className={`px-3 py-2 text-right font-mono ${pnlColor(pnl)}`}>
