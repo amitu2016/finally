@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
-import type { TradeRequest } from "@/lib/types";
+import { useEffect, useState } from "react";
+import type { Portfolio, TradeRequest } from "@/lib/types";
 
 interface Props {
   initialTicker?: string | null;
-  onTrade: (req: TradeRequest) => Promise<unknown>;
+  onTrade: (req: TradeRequest) => Promise<Portfolio>;
 }
 
 export function TradeBar({ initialTicker, onTrade }: Props) {
   const [ticker, setTicker] = useState(initialTicker ?? "");
+
+  useEffect(() => {
+    if (initialTicker) setTicker(initialTicker);
+  }, [initialTicker]);
+
   const [quantity, setQuantity] = useState("1");
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(

@@ -11,7 +11,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /uvx /bin/
 
 # Copy backend files for dependency installation
 COPY backend/pyproject.toml backend/uv.lock ./
@@ -38,4 +38,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
 
 # Command to run the application
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

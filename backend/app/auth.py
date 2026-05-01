@@ -2,13 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
 from jose import JWTError, jwt
 
-SECRET_KEY = os.getenv("JWT_SECRET", "dev-secret-change-in-production")
+logger = logging.getLogger(__name__)
+
+_DEFAULT_SECRET = "dev-secret-change-in-production"
+SECRET_KEY = os.getenv("JWT_SECRET", _DEFAULT_SECRET)
+
+if SECRET_KEY == _DEFAULT_SECRET:
+    logger.warning(
+        "JWT_SECRET is not set — using insecure default. "
+        "Set the JWT_SECRET environment variable in production."
+    )
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_DAYS = 7
 

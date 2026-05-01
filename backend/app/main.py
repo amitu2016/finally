@@ -30,11 +30,19 @@ load_dotenv(PROJECT_ROOT / ".env")
 logger = logging.getLogger("finally.app")
 logging.basicConfig(level=logging.INFO)
 
-SNAPSHOT_INTERVAL = 30  # seconds
+SNAPSHOT_INTERVAL = 30          # seconds between portfolio snapshots
+CLEANUP_INTERVAL = 3600         # seconds between old-snapshot purges (1 hour)
+SNAPSHOT_RETENTION_DAYS = 7     # delete snapshots older than this
 
 
 async def _snapshot_loop(app: FastAPI) -> None:
-    """Record a portfolio value snapshot every SNAPSHOT_INTERVAL seconds for all users."""
+    """Record a portfolio value snapshot every SNAPSHOT_INTERVAL seconds for all users.
+
+    Also purges snapshots older than SNAPSHOT_RETENTION_DAYS once per hour to
+    prevent unbounded table growth.
+    """
+    ticks_until_cleanup = CLEANUP_INTERVAL // SNAPSHOT_INTERVAL
+    tick = 0
     while True:
         try:
             await asyncio.sleep(SNAPSHOT_INTERVAL)
@@ -43,6 +51,13 @@ async def _snapshot_loop(app: FastAPI) -> None:
                 for user_id in user_ids:
                     total = await compute_total_value(db, app.state.market, user_id)
                     await queries.record_snapshot(db, user_id, total)
+                tick += 1
+                if tick >= ticks_until_cleanup:
+                    tick = 0
+                    for user_id in user_ids:
+                        await queries.delete_old_snapshots(
+                            db, user_id, keep_days=SNAPSHOT_RETENTION_DAYS
+                        )
         except asyncio.CancelledError:
             raise
         except Exception:

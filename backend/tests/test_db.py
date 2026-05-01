@@ -29,6 +29,7 @@ async def test_init_db_creates_file(db_path: str):
 async def test_init_db_creates_all_tables(db_path: str):
     await init_db(db_path)
     expected = {
+        "users",
         "users_profile",
         "watchlist",
         "positions",

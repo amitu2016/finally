@@ -229,6 +229,22 @@ async def record_snapshot(
     await db.commit()
 
 
+async def delete_old_snapshots(
+    db: aiosqlite.Connection,
+    user_id: str = DEFAULT_USER,
+    keep_days: int = 7,
+) -> None:
+    """Delete portfolio snapshots older than keep_days days."""
+    cutoff = (
+        datetime.now(timezone.utc) - timedelta(days=keep_days)
+    ).isoformat()
+    await db.execute(
+        "DELETE FROM portfolio_snapshots WHERE user_id=? AND recorded_at<?",
+        (user_id, cutoff),
+    )
+    await db.commit()
+
+
 async def get_snapshots(
     db: aiosqlite.Connection,
     user_id: str = DEFAULT_USER,

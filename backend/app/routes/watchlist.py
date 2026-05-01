@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 class WatchlistAddRequest(BaseModel):
-    ticker: str = Field(..., min_length=1, max_length=20)
+    ticker: str = Field(..., min_length=1, max_length=20, pattern=r"^[A-Za-z0-9&-]+$")
 
 
 def _format_entry(ticker: str, prices: dict) -> dict:

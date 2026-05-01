@@ -18,10 +18,13 @@ export function PriceCell({ price }: Props) {
       else if (price < prev) setFlash("flash-down");
     }
     previous.current = price;
+  }, [price]);
+
+  useEffect(() => {
     if (!flash) return;
     const t = setTimeout(() => setFlash(""), 500);
     return () => clearTimeout(t);
-  }, [price, flash]);
+  }, [flash]);
 
   return (
     <span className={`inline-block rounded px-1.5 py-0.5 font-mono ${flash}`}>
