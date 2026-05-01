@@ -13,6 +13,9 @@ from ..dependencies import get_db_conn
 
 router = APIRouter(prefix="/api/auth")
 
+DEMO_USERNAME = "demo"
+DEMO_PASSWORD = "demo1234"
+
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=30, pattern=r"^[a-zA-Z0-9_]+$")
@@ -51,4 +54,17 @@ async def login(
         "token": create_token(user["id"]),
         "user_id": user["id"],
         "username": body.username,
+    }
+
+
+@router.post("/guest")
+async def guest_login(db: aiosqlite.Connection = Depends(get_db_conn)) -> dict:
+    """Return a token for the shared demo account, creating it if it doesn't exist."""
+    user = await queries.get_user_by_username(db, DEMO_USERNAME)
+    if not user:
+        user = await queries.create_user(db, DEMO_USERNAME, hash_password(DEMO_PASSWORD))
+    return {
+        "token": create_token(user["id"]),
+        "user_id": user["id"],
+        "username": DEMO_USERNAME,
     }

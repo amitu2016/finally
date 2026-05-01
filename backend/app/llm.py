@@ -6,7 +6,7 @@ import logging
 import os
 
 import aiosqlite
-from litellm import completion
+from litellm import acompletion
 
 from db import queries
 from market.base import MarketDataProvider
@@ -97,7 +97,7 @@ async def call_llm(
     system_content = SYSTEM_PROMPT + "\n\nCurrent portfolio:\n" + portfolio_context
     full_messages = [{"role": "system", "content": system_content}] + messages
 
-    response = completion(
+    response = await acompletion(
         model=MODEL,
         messages=full_messages,
         response_format=ChatResponse,

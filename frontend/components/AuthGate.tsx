@@ -131,6 +131,14 @@ function AuthScreen({ onSuccess }: { onSuccess: (token: string, user: AuthUser) 
               and the default watchlist.
             </p>
           )}
+
+          <div className="mt-5 flex items-center gap-3">
+            <div className="h-px flex-1 bg-[#30363d]" />
+            <span className="text-xs text-[#484f58]">or</span>
+            <div className="h-px flex-1 bg-[#30363d]" />
+          </div>
+
+          <GuestButton onSuccess={onSuccess} />
         </div>
 
         <p className="mt-4 text-center text-xs text-[#484f58]">
@@ -138,5 +146,32 @@ function AuthScreen({ onSuccess }: { onSuccess: (token: string, user: AuthUser) 
         </p>
       </div>
     </div>
+  );
+}
+
+function GuestButton({ onSuccess }: { onSuccess: (token: string, user: AuthUser) => void }) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleGuest() {
+    setLoading(true);
+    try {
+      const res = await api.guestLogin();
+      onSuccess(res.token, { user_id: res.user_id, username: res.username });
+    } catch {
+      // ignore — button just stays
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={() => void handleGuest()}
+      className="mt-2 w-full rounded border border-[#30363d] py-2 text-xs text-[#8b949e] hover:border-[#8b949e] hover:text-[#e6edf3] transition-colors disabled:opacity-50"
+    >
+      {loading ? "Loading…" : "Try as Guest (shared demo account)"}
+    </button>
   );
 }

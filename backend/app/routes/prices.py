@@ -18,7 +18,8 @@ from ..dependencies import get_current_user, get_current_user_sse, get_market
 
 router = APIRouter()
 
-STREAM_INTERVAL = 0.5  # seconds
+STREAM_INTERVAL = 0.5          # seconds between SSE pushes
+WATCHLIST_REFRESH = 5.0        # seconds between watchlist DB re-reads
 
 
 def _serialize(p: StockPrice) -> dict:
@@ -42,11 +43,16 @@ async def stream_prices(
     provider: MarketDataProvider = request.app.state.market
 
     async def event_generator() -> AsyncIterator[dict]:
+        tickers: set[str] = set()
+        last_refresh = -WATCHLIST_REFRESH  # force immediate load on first tick
         while True:
             if await request.is_disconnected():
                 break
-            async with get_db(db_path) as conn:
-                tickers = set(await queries.get_watchlist(conn, user_id))
+            now = asyncio.get_event_loop().time()
+            if now - last_refresh >= WATCHLIST_REFRESH:
+                async with get_db(db_path) as conn:
+                    tickers = set(await queries.get_watchlist(conn, user_id))
+                last_refresh = now
             prices = provider.get_all_prices()
             for ticker in tickers:
                 p = prices.get(ticker)

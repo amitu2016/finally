@@ -10,26 +10,15 @@ from typing import AsyncIterator
 
 import aiosqlite
 
+from .queries import DEFAULT_WATCHLIST
+
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
 DEFAULT_USER_ID = "default"
 DEFAULT_CASH = 100000.0
-DEFAULT_WATCHLIST = (
-    "RELIANCE",
-    "TCS",
-    "HDFCBANK",
-    "INFY",
-    "ICICIBANK",
-    "BHARTIARTL",
-    "SBIN",
-    "ITC",
-    "LT",
-    "HINDUNILVR",
-)
 
 
 def _now() -> str:
-    """Return current UTC time as ISO 8601 string."""
     return datetime.now(timezone.utc).isoformat()
 
 
