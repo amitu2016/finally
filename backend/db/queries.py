@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import aiosqlite
@@ -314,6 +314,22 @@ async def save_message(
         "actions": actions,
         "created_at": created_at,
     }
+
+
+async def count_recent_messages(
+    db: aiosqlite.Connection,
+    user_id: str,
+    hours: int = 24,
+) -> int:
+    """Count user-role messages sent in the last ``hours`` hours."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    cursor = await db.execute(
+        "SELECT COUNT(*) AS n FROM chat_messages "
+        "WHERE user_id=? AND role='user' AND created_at >= ?",
+        (user_id, since.isoformat()),
+    )
+    row = await cursor.fetchone()
+    return row["n"] if row else 0
 
 
 async def get_chat_history(

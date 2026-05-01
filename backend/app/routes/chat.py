@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import aiosqlite
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db import queries
@@ -21,6 +22,8 @@ router = APIRouter()
 logger = logging.getLogger("finally.chat")
 
 HISTORY_LIMIT = 20
+GUEST_USERNAME = "demo"
+GUEST_DAILY_LIMIT = int(os.getenv("GUEST_DAILY_CHAT_LIMIT", "10"))
 
 
 class ChatRequest(BaseModel):
@@ -93,6 +96,15 @@ async def chat(
     provider: MarketDataProvider = Depends(get_market),
     user_id: str = Depends(get_current_user),
 ) -> dict[str, Any]:
+    user = await queries.get_user_by_id(db, user_id)
+    if user and user["username"] == GUEST_USERNAME:
+        count = await queries.count_recent_messages(db, user_id, hours=24)
+        if count >= GUEST_DAILY_LIMIT:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Guest accounts are limited to {GUEST_DAILY_LIMIT} AI messages per day. Create a free account to continue.",
+            )
+
     portfolio_context = await build_portfolio_context(db, provider, user_id)
 
     history_rows = await queries.get_chat_history(db, user_id, limit=HISTORY_LIMIT)
