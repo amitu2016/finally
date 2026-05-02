@@ -28,7 +28,7 @@ export function WatchlistPanel({
   return (
     <section className="flex h-full flex-col border-r border-[#30363d] bg-[#0d1117]">
       <div className="flex items-center justify-between border-b border-[#30363d] bg-[#161b22] px-3 py-2">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
+        <h2 className="section-header text-xs font-semibold uppercase tracking-widest text-[#8b949e]">
           Watchlist
         </h2>
         <span className="text-[10px] text-[#8b949e]">
@@ -57,8 +57,10 @@ export function WatchlistPanel({
                 <tr
                   key={entry.ticker}
                   onClick={() => onSelect(entry.ticker)}
-                  className={`cursor-pointer border-b border-[#21262d] hover:bg-[#161b22] ${
-                    isSelected ? "bg-[#1f2632]" : ""
+                  className={`group cursor-pointer border-b border-[#21262d] transition-colors hover:bg-[#161b22] ${
+                    isSelected
+                      ? "bg-[#1a1f2e] shadow-[inset_2px_0_0_#209dd7]"
+                      : "hover:shadow-[inset_2px_0_0_#30363d]"
                   }`}
                 >
                   <td className="px-2 py-2">
@@ -93,7 +95,7 @@ export function WatchlistPanel({
                         e.stopPropagation();
                         void onRemove(entry.ticker);
                       }}
-                      className="rounded p-1 text-[#ef4444] hover:bg-[#30363d]"
+                      className="rounded p-1 text-[#ef4444] opacity-0 transition-opacity hover:bg-[#30363d] group-hover:opacity-100"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="3 6 5 6 21 6" />

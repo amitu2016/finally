@@ -69,11 +69,16 @@ export function ChatPanel({ open, onToggle, onActions }: Props) {
       <button
         type="button"
         onClick={onToggle}
-        className="flex h-full w-10 flex-col items-center justify-center border-l border-[#30363d] bg-[#161b22] text-[10px] uppercase tracking-widest text-[#8b949e] hover:text-[#ecad0a]"
+        className="group flex h-full w-10 flex-col items-center justify-center gap-2 border-l border-[#30363d] bg-[#161b22] transition-colors hover:bg-[#1f2632]"
         aria-label="Open AI chat"
       >
-        <span className="rotate-180" style={{ writingMode: "vertical-rl" }}>
-          AI Assistant
+        <span className="text-[#753991] transition-colors group-hover:text-[#9b59c1]">
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden>
+            <path d="M3 4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8l-4 3v-3H4a1 1 0 0 1-1-1V4z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <span className="text-[10px] uppercase tracking-widest text-[#8b949e] transition-colors group-hover:text-[#ecad0a]" style={{ writingMode: "vertical-rl", transform: "rotate(180deg)" }}>
+          AI
         </span>
       </button>
     );
@@ -82,14 +87,14 @@ export function ChatPanel({ open, onToggle, onActions }: Props) {
   return (
     <section className="flex h-full w-full flex-col border-l border-[#30363d] bg-[#0d1117] md:w-80">
       <div className="flex items-center justify-between border-b border-[#30363d] bg-[#161b22] px-3 py-2">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-[#ecad0a]">
+        <h2 className="section-header text-xs font-semibold uppercase tracking-widest text-[#ecad0a]">
           AI Copilot
         </h2>
         <button
           type="button"
           onClick={onToggle}
           aria-label="Collapse chat"
-          className="rounded px-2 text-[#8b949e] hover:bg-[#30363d]"
+          className="rounded px-2 py-0.5 text-sm text-[#8b949e] transition-colors hover:bg-[#30363d] hover:text-[#e6edf3]"
         >
           ›
         </button>
@@ -108,8 +113,8 @@ export function ChatPanel({ open, onToggle, onActions }: Props) {
             <div
               className={`max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-[#209dd7] text-[#0d1117]"
-                  : "bg-[#161b22] text-[#e6edf3] border border-[#30363d]"
+                  ? "bg-gradient-to-br from-[#209dd7] to-[#1778a8] font-medium text-white shadow-sm"
+                  : "border border-[#30363d] border-l-2 border-l-[#753991] bg-[#161b22] text-[#e6edf3]"
               }`}
             >
               <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -144,8 +149,8 @@ export function ChatPanel({ open, onToggle, onActions }: Props) {
         ))}
         {busy && (
           <div className="flex justify-start">
-            <div className="rounded-lg border border-[#30363d] bg-[#161b22] px-3 py-2 text-xs text-[#8b949e]">
-              FinAlly is thinking…
+            <div className="rounded-lg border border-[#30363d] border-l-2 border-l-[#753991] bg-[#161b22] px-3 py-2 text-xs text-[#8b949e]">
+              <span className="animate-pulse">FinAlly is thinking…</span>
             </div>
           </div>
         )}
@@ -162,13 +167,13 @@ export function ChatPanel({ open, onToggle, onActions }: Props) {
           }}
           placeholder="Ask the AI…"
           disabled={busy}
-          className="flex-1 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1 text-xs text-[#e6edf3] outline-none focus:border-[#753991] disabled:opacity-50"
+          className="flex-1 rounded border border-[#30363d] bg-[#0d1117] px-2.5 py-1.5 text-xs text-[#e6edf3] outline-none transition-colors focus:border-[#753991] disabled:opacity-50"
         />
         <button
           type="button"
           disabled={busy || !input.trim()}
           onClick={() => void send()}
-          className="rounded bg-[#753991] px-3 py-1 text-xs font-semibold text-white disabled:opacity-40"
+          className="rounded bg-[#753991] px-3 py-1.5 text-xs font-bold tracking-wide text-white transition-all hover:brightness-110 disabled:opacity-40"
         >
           Send
         </button>

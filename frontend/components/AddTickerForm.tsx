@@ -32,12 +32,12 @@ export function AddTickerForm({ onAdd }: Props) {
         value={value}
         onChange={(e) => setValue(e.target.value.toUpperCase())}
         placeholder="Add ticker (e.g. WIPRO)"
-        className="flex-1 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1 font-mono text-xs text-[#e6edf3] outline-none focus:border-[#209dd7]"
+        className="flex-1 rounded border border-[#30363d] bg-[#0d1117] px-2.5 py-1.5 font-mono text-xs text-[#e6edf3] outline-none transition-colors focus:border-[#209dd7]"
       />
       <button
         type="submit"
         disabled={busy || !value.trim()}
-        className="rounded bg-[#209dd7] px-3 py-1 text-xs font-semibold text-[#0d1117] disabled:opacity-40"
+        className="rounded bg-[#209dd7] px-3 py-1.5 text-xs font-bold text-[#0d1117] transition-all hover:brightness-110 disabled:opacity-40"
       >
         Add
       </button>

@@ -114,18 +114,18 @@ export function MainChart({ ticker, liveTick }: Props) {
     <section className="flex h-full flex-col bg-[#0d1117]">
       <div className="flex items-center justify-between border-b border-[#30363d] bg-[#161b22] px-4 py-2">
         <div>
-          <h2 className="font-mono text-sm font-semibold text-[#e6edf3]">
+          <h2 className="section-header font-mono text-sm font-semibold text-[#e6edf3]">
             {ticker ?? "Select a ticker"}
           </h2>
           {liveTick?.company_name && (
-            <p className="text-[10px] text-[#8b949e]">{liveTick.company_name}</p>
+            <p className="pl-[10px] text-[10px] text-[#8b949e]">{liveTick.company_name}</p>
           )}
         </div>
         <div className="flex items-baseline gap-3">
-          <span className="font-mono text-base text-[#e6edf3]">
+          <span className="font-mono text-lg font-bold text-[#e6edf3]">
             {formatINR(liveTick?.price ?? null)}
           </span>
-          <span className={`font-mono text-xs ${pnlColor(change)}`}>
+          <span className={`font-mono text-sm font-medium ${pnlColor(change)}`}>
             {formatPct(change)}
           </span>
         </div>

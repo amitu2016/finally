@@ -46,14 +46,14 @@ export function TradeBar({ initialTicker, onTrade }: Props) {
   };
 
   return (
-    <section className="border-t border-[#30363d] bg-[#161b22] px-3 py-2">
+    <section className="border-t border-[#30363d] bg-[#161b22] px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-[#8b949e]">Trade</span>
         <input
           value={ticker}
           onChange={(e) => setTicker(e.target.value.toUpperCase())}
           placeholder="TICKER"
-          className="min-w-[72px] flex-1 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5 font-mono text-xs text-[#e6edf3] outline-none focus:border-[#209dd7] sm:flex-none sm:w-28"
+          className="min-w-[72px] flex-1 rounded border border-[#30363d] bg-[#0d1117] px-2 py-2 font-mono text-sm text-[#e6edf3] outline-none transition-colors focus:border-[#209dd7] sm:flex-none sm:w-28"
         />
         <input
           type="number"
@@ -62,13 +62,13 @@ export function TradeBar({ initialTicker, onTrade }: Props) {
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
           placeholder="Qty"
-          className="w-20 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5 font-mono text-xs text-[#e6edf3] outline-none focus:border-[#209dd7]"
+          className="w-20 rounded border border-[#30363d] bg-[#0d1117] px-2 py-2 font-mono text-sm text-[#e6edf3] outline-none transition-colors focus:border-[#209dd7]"
         />
         <button
           type="button"
           disabled={busy}
           onClick={() => void submit("buy")}
-          className="flex-1 rounded bg-[#209dd7] px-3 py-1.5 text-xs font-semibold text-[#0d1117] disabled:opacity-40 sm:flex-none sm:px-4"
+          className="flex-1 rounded bg-[#209dd7] px-5 py-2 text-xs font-bold tracking-widest text-[#0d1117] transition-all hover:brightness-110 disabled:opacity-40 sm:flex-none"
         >
           BUY
         </button>
@@ -76,7 +76,7 @@ export function TradeBar({ initialTicker, onTrade }: Props) {
           type="button"
           disabled={busy}
           onClick={() => void submit("sell")}
-          className="flex-1 rounded bg-[#ef4444] px-3 py-1.5 text-xs font-semibold text-[#0d1117] disabled:opacity-40 sm:flex-none sm:px-4"
+          className="flex-1 rounded bg-[#ef4444] px-5 py-2 text-xs font-bold tracking-widest text-white transition-all hover:brightness-110 disabled:opacity-40 sm:flex-none"
         >
           SELL
         </button>

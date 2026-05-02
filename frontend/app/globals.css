@@ -41,6 +41,11 @@ button {
   cursor: pointer;
 }
 
+.section-header {
+  border-left: 2px solid var(--accent-yellow);
+  padding-left: 8px;
+}
+
 .flash-up {
   animation: flashGreen 0.5s ease-out;
 }

@@ -25,19 +25,19 @@ const statusLabel: Record<ConnectionStatus, string> = {
 
 export function Header({ totalValue, cashBalance, status, username, onLogout }: Props) {
   return (
-    <header className="flex items-center justify-between border-b border-[#30363d] bg-[#161b22] px-3 py-2 md:px-4 md:py-3">
+    <header className="flex items-center justify-between border-b border-[#30363d] border-t-2 border-t-[#ecad0a] bg-[#161b22] px-3 py-2 md:px-4 md:py-2.5">
       <div className="flex items-baseline gap-2">
         <span className="text-lg font-bold tracking-tight text-[#ecad0a]">FinAlly</span>
-        <span className="hidden sm:inline text-xs uppercase tracking-widest text-[#8b949e]">AI Trading Workstation</span>
+        <span className="hidden sm:inline text-[10px] uppercase tracking-widest text-[#8b949e]">AI Trading Workstation</span>
       </div>
       <div className="flex items-center gap-3 md:gap-6">
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-widest text-[#8b949e]">Portfolio</div>
-          <div className="font-mono text-sm font-semibold text-[#e6edf3] md:text-base">{formatINR(totalValue)}</div>
+          <div className="font-mono text-base font-bold text-[#e6edf3] md:text-lg">{formatINR(totalValue)}</div>
         </div>
         <div className="hidden sm:block text-right">
           <div className="text-[10px] uppercase tracking-widest text-[#8b949e]">Cash</div>
-          <div className="font-mono text-base text-[#e6edf3]">{formatINR(cashBalance)}</div>
+          <div className="font-mono text-sm font-medium text-[#e6edf3] md:text-base">{formatINR(cashBalance)}</div>
         </div>
         <div className="flex items-center gap-1.5 rounded border border-[#30363d] bg-[#0d1117] px-2 py-1.5">
           <span className={`inline-block h-2 w-2 flex-shrink-0 rounded-full ${dotColor[status]}`} aria-label={statusLabel[status]} />
